@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tanques Tácticos 2D — Prototipo Pixel Art</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- PANTALLA DE SELECCIÓN DE TANQUE (HANGAR) -->
+    <section id="hangar-screen" class="screen">
+      <div class="hangar-card">
+        <header class="hangar-header">
+          <div>
+            <span class="badge">PROTOTIPO PVE POR TURNOS</span>
+            <h1>TANQUES TÁCTICOS 2D</h1>
+            <p class="subtitle">Micro-cuadrícula destructible • Apuntado 360° • IA con Pathfinding A*</p>
+          </div>
+          <div class="preview-box">
+            <canvas id="tank-preview-canvas" width="96" height="96"></canvas>
+            <span id="preview-label">Vista previa</span>
+          </div>
+        </header>
+
+        <div class="hangar-grid">
+          <div class="panel">
+            <h2>1. Elige Tipo de Tanque</h2>
+            <div id="tank-type-options" class="option-list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>2. Habilidades del Tanque</h2>
+            <div id="tank-skills-slot" class="skills-slot"></div>
+          </div>
+
+          <div class="panel">
+            <h2>3. Elige Blindaje</h2>
+            <div id="armor-options" class="option-list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>4. Dificultad y Escenario</h2>
+            <div class="sub-section">
+              <label class="section-label">Dificultad de la IA</label>
+              <div id="difficulty-options" class="pill-row"></div>
+            </div>
+            <div class="sub-section">
+              <label class="section-label">Mapa</label>
+              <div id="map-options" class="pill-row">
+                <button class="pill active" data-map="bunkers">Búnkeres</button>
+                <button class="pill" data-map="labyrinth">Laberinto</button>
+                <button class="pill" data-map="open">Campo Abierto</button>
+              </div>
+            </div>
+            <div class="controls-preview">
+              <strong>Controles en portátil:</strong>
+              <ul>
+                <li><code>W A S D</code> / Flechas: Mover casilla a casilla</li>
+                <li><code>Clic Izquierdo</code>: Apuntar 360° y disparar</li>
+                <li><code>Clic Derecho</code> (o modo <code>[M]</code>): Mover por ruta A*</li>
+                <li><code>1</code> / <code>2</code> / <code>3</code>: Normal / Especial 1 / Especial 2</li>
+                <li><code>Espacio</code>: Terminar turno (automático si gastas disparo y AP)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <footer class="hangar-footer">
+          <div id="ws-status" class="ws-status">Conectando con el servidor...</div>
+          <div class="footer-actions">
+            <button id="shutdown-hangar-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
+            <button id="start-match-btn" class="btn-primary" disabled>Iniciar Batalla</button>
+          </div>
+        </footer>
+      </div>
+    </section>
+
+    <!-- PANTALLA DE BATALLA -->
+    <section id="battle-screen" class="screen hidden">
+      <header class="hud-top">
+        <div class="hud-group">
+          <div class="turn-pill" id="turn-indicator">TURNO 1</div>
+          <div class="phase-pill player" id="phase-indicator">TU TURNO</div>
+        </div>
+
+        <div class="hud-group stats-group">
+          <div class="stat-box">
+            <span class="stat-label">BLINDAJE (PV)</span>
+            <div class="hp-bar-wrap">
+              <div id="player-hp-bar" class="hp-bar-fill"></div>
+              <span id="player-hp-text" class="hp-text">100 / 100</span>
+            </div>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">MOVIMIENTO (AP)</span>
+            <div id="player-ap-text" class="ap-text">19 / 19</div>
+          </div>
+        </div>
+
+        <div class="hud-group actions-group">
+          <button id="toggle-control-btn" class="btn-tool hidden" title="Alternar control entre Tanque y Dron">[TAB] Tanque</button>
+          <button id="mode-shoot-btn" class="btn-tool active" title="Clic izquierdo dispara">[F] Disparar</button>
+          <button id="mode-move-btn" class="btn-tool" title="Clic izquierdo mueve con ruta A*">[M] Mover</button>
+          <span class="divider"></span>
+          <button id="weapon-normal-btn" class="btn-weapon active">[1] Estándar</button>
+          <button id="weapon-special-btn" class="btn-weapon">[2] Especial 1</button>
+          <button id="weapon-special2-btn" class="btn-weapon">[3] Especial 2</button>
+          <span class="divider"></span>
+          <button id="end-turn-btn" class="btn-accent">Terminar Turno [Espacio]</button>
+          <button id="back-hangar-btn" class="btn-ghost">Hangar</button>
+          <button id="shutdown-battle-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
+        </div>
+      </header>
+
+      <main class="battle-main">
+        <div class="canvas-wrapper">
+          <canvas id="game-canvas" width="960" height="576"></canvas>
+          <div id="toast-banner" class="toast hidden"></div>
+
+          <!-- OVERLAY FIN DE PARTIDA -->
+          <div id="gameover-overlay" class="overlay hidden">
+            <div class="overlay-card">
+              <h2 id="gameover-title">¡VICTORIA!</h2>
+              <p id="gameover-desc"></p>
+              <div class="overlay-actions">
+                <button id="rematch-btn" class="btn-primary">Jugar de Nuevo</button>
+                <button id="overlay-hangar-btn" class="btn-ghost">Cambiar Tanque</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="sidebar">
+          <div class="side-panel">
+            <h3>Tanques Enemigos</h3>
+            <div id="enemy-list" class="enemy-list"></div>
+          </div>
+
+          <div class="side-panel log-panel">
+            <h3>Registro Táctico</h3>
+            <ul id="combat-log" class="combat-log"></ul>
+          </div>
+
+          <div class="side-panel help-panel">
+            <h3>Atajos Rápidos</h3>
+            <p><code>WASD</code> mover • <code>Clic Der</code> ruta A*</p>
+            <p><code>Clic Izq</code> disparar 360° • <code>1/2/3</code> arma • <code>TAB</code> dron</p>
+            <p><code>M / F</code> alternar clic para trackpad</p>
+          </div>
+        </aside>
+      </main>
+    </section>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

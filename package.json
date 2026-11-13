@@ -1,0 +1,17 @@
+{
+  "name": "tanques-tactico-2d",
+  "version": "0.1.0",
+  "description": "Prototipo de juego 2D de vista superior de tanques por turnos con micro-cuadricula destructible, apuntado 360 y servidor Node.js.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "tanques",
+    "pixel-art",
+    "turn-based",
+    "websocket",
+    "2d"
+  ],
+  "license": "MIT"
+}
