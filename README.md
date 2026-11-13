@@ -24,8 +24,8 @@ Juego táctico por turnos en navegador con servidor autoritativo en **Node.js pu
 
 ## Cómo jugar
 
-1. Ejecuta `jugar.bat` (o abre una terminal en esta carpeta y ejecuta `node server.js`).
-2. Abre en tu navegador `http://localhost:3000`.
+1. Haz doble clic en `jugar.vbs` (para arrancar sin abrir ninguna ventana de terminal) o ejecuta `jugar.bat` (lanza `jugar.vbs` en segundo plano y cierra al instante).
+2. El navegador se abrirá automáticamente en `http://localhost:3000`. Para apagar el servidor usa el botón **Cerrar Servidor** dentro del juego.
 
 ### Controles
 - `W A S D` o Flechas: Mover el tanque (o el Dron si está seleccionado) paso a paso.
@@ -44,7 +44,8 @@ El proyecto separa la configuración, los *assets* (datos de juego en `src/data/
 ### Raíz del proyecto
 | Archivo | Contenido y responsabilidad |
 |---|---|
-| `jugar.bat` | Script de Windows que abre `http://localhost:3000` y arranca `node server.js`. |
+| `jugar.vbs` | Lanzador silencioso de Windows (`WScript.Shell`): inicia `node server.js` sin ventana de terminal, espera a que `http://127.0.0.1:3000/index.html` responda y abre el navegador. |
+| `jugar.bat` | Delega inmediatamente en `wscript.exe //B "%~dp0jugar.vbs"` y finaliza sin dejar consola abierta. |
 | `package.json` | Metadatos del proyecto (`"main": "server.js"`, script `"start": "node server.js"`), sin dependencias externas. |
 | `server.js` | Punto de entrada del servidor HTTP/WebSocket. Sirve archivos estáticos desde `public/`, expone `POST /api/shutdown`, gestiona `shutdownServer()` y delega conexiones WebSocket (`upgrade`) a `attachWebSocketSession`. |
 | `README.md` | Documentación técnica de arquitectura, archivos y flujo de ejecución. |
@@ -154,7 +155,7 @@ CLIENTE
 ### 2. Secuencia de llamadas en tiempo de ejecución
 
 1. **Arranque del servidor y apertura del juego**
-   - `jugar.bat` (o consola) ejecuta `node server.js`.
+   - `jugar.vbs` (o `jugar.bat` llamando a `wscript.exe //B jugar.vbs`) ejecuta `node server.js` oculto en segundo plano (`windowStyle = 0`), comprueba que el servidor responda `200` y abre `http://localhost:3000`.
    - `server.js` levanta `http.createServer` en `PORT` (`3000`) sirviendo `public/index.html`, `public/style.css` y `public/js/**/*.js`.
    - El navegador carga `public/js/main.js`, que llama en orden a:
      1. `initShutdownButtons()` (`wsClient.js`)
