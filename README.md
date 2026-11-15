@@ -8,21 +8,22 @@ Juego táctico por turnos en navegador / aplicación Windows con servidor autori
 
 - **3 modos de juego:**
   - **PvE vs IA:** Servidor autoritativo en local con 3 niveles de dificultad (`Fácil`, `Normal`, `Difícil`).
-  - **PvP Ad-Hoc (Red / Sala):** Un jugador crea una sala y actúa como Host (`IP:Puerto` + código de 4 caracteres), mientras el invitado se conecta directamente por WebSocket (`ws://<host>:<puerto>`) y sincroniza cada turno.
+  - **PvP Ad-Hoc (Red / Sala con Antesala):** Un jugador crea una sala como Host (`IP:Puerto`, descubrimiento LAN UDP y código de 4 caracteres). Al unirse el invitado, ambos entran primero en una **antesala Ad-Hoc** donde cada jugador elige libremente su tanque y blindaje, mientras el Host selecciona la arena y lanza la partida sincronizada por WebSocket (`ws://<host>:<puerto>`).
   - **PvP Legacy (Módem Años 90 por Audio):** Sincronización sin red mediante sonidos reales de módem analógico de los años 90 (tono de marcado, marcación DTMF, portadora CED a `2100 Hz` y ráfagas V.32bis/V.90) junto a un módem acústico BFSK real (`1200 Hz` / `2200 Hz`, trama UART + CRC-16 + demodulador Goertzel) que puede usarse por altavoz + micrófono entre dos dispositivos cercanos o en el mismo PC con audio audible.
-- **9 Tanques con habilidad especial `[2]` y habilidad táctica `[3]`:**
+- **10 Tanques con habilidad especial `[2]` y habilidad táctica `[3]`:**
   - **Artillero** (`Mortero Táctico` + `Cóctel Molotov`)
   - **Escopetero** (`Cañón Metralla` + `Mina Terrestre`)
   - **Rebotador** (`Cañón Rebotador` + `Tiro Cargado`)
-  - **Cazacarros** (`Rifle Perforante` + `Trampa Invisible`)
+  - **Cazacarros** (`Rifle Perforante` + `Trampa Invisible` con ocultación en PvP)
   - **Ingeniero** (`Constructor de Muro` + `Torreta Autónoma`)
   - **Químico** (`Tiro Tóxico` + `Tiro Congelador`)
   - **Caín** (`Tiro de Fuego` + `Muro de Fuego`)
   - **NetRunner** (`Escopeta Corta` básica + `Dron Táctico` controlable + `Bomba PEM`)
   - **Berserker** (Pasiva `Furia de Sangre` + `Chupasangre` con robo de vida + `Ira`)
+  - **Assasin** (`Golpe Trampero`: `44` daño base, `150%` = `66` por el panel trasero sin ruedas y `-25%` = `33` por delante usando el último movimiento como referencia + línea dorada visual en la espalda al seleccionarlo; `TP`: espera 1 turno inmóvil y sin disparar con escudo `-35%` daño recibido → teletransporte al destino elegido + `2` turnos de sigilo oculto si no se mueve ni dispara)
 - **3 chasis configurables** (`Ligero`, `Medio`, `Pesado`) y **3 niveles de dificultad** (`Fácil`, `Normal`, `Difícil`).
 - **Micro-cuadrícula destructible (`120 × 72` celdas de `8 × 8 px`):** Muros de ladrillo con vida gradual, acero indestructible, escombros y recálculo parcial del terreno en canvas.
-- **Botón de apagado integrado:** Permite cerrar el servidor local de forma limpia directamente desde el Hangar o durante la batalla (`WS shutdown_server` o `POST /api/shutdown`).
+- **Cierre automático e integrado del servidor:** Al cerrar la ventana del juego el servidor local se detiene automáticamente (`beforeunload`/`pagehide` + `navigator.sendBeacon('/api/shutdown')`, temporizador `1.5s` al desconectarse el cliente local y Win32 Job Object en el `.exe`), además del botón manual de apagado (`WS shutdown_server` o `POST /api/shutdown`).
 
 ---
 
@@ -57,7 +58,7 @@ El proyecto separa la configuración, los *assets* (datos de juego en `src/data/
 | `jugar.vbs` | Lanzador silencioso de Windows (`WScript.Shell`): inicia `node server.js` sin ventana de terminal, espera a que `http://127.0.0.1:3000/index.html` responda, localiza un navegador compatible (`msedge.exe`, `chrome.exe`, `brave.exe`, `opera.exe`) y lo abre en ventana independiente (`--app=http://localhost:3000 --new-window --window-size=1320,860`) sin barra de direcciones ni pestañas del buscador. |
 | `jugar.bat` | Delega inmediatamente en `wscript.exe //B "%~dp0jugar.vbs"` y finaliza sin dejar consola abierta. |
 | `package.json` | Metadatos del proyecto (`"main": "server.js"`, script `"start": "node server.js"`), sin dependencias externas. |
-| `server.js` | Punto de entrada del servidor HTTP/WebSocket. Sirve archivos estáticos desde `public/`, expone `POST /api/shutdown`, gestiona `shutdownServer()` (incluyendo cierre automático a los `2.5s` si se desconectan todas las ventanas WebSocket) y delega conexiones WebSocket (`upgrade`) a `attachWebSocketSession`. |
+| `server.js` | Punto de entrada del servidor HTTP/WebSocket. Sirve archivos estáticos desde `public/`, expone `POST /api/shutdown` y `/api/host-info`, descubre salas Ad-Hoc LAN y gestiona `shutdownServer()` automáticamente tras `1.5s` al cerrarse la ventana/WebSocket local. |
 | `README.md` | Documentación técnica de arquitectura, archivos y flujo de ejecución. |
 
 ---
@@ -74,26 +75,26 @@ Cada ficha está definida como un objeto independiente exportable y agrupada en 
 | Archivo | Objetos individuales y catálogo exportado |
 |---|---|
 | `src/data/armors.js` | `LIGHT_ARMOR`, `MEDIUM_ARMOR`, `HEAVY_ARMOR` → agrupados en `ARMOR_CATALOG`. |
-| `src/data/specials1.js` | `MORTAR_ABILITY`, `SHOTGUN_ABILITY`, `RICOCHET_ABILITY`, `PIERCING_ABILITY`, `BUILDER_ABILITY`, `TOXIC_ABILITY`, `FIRE_SHOT_ABILITY`, `DRONE_ABILITY`, `BLOODSUCKER_ABILITY` → agrupados en `TURRET_CATALOG`. |
-| `src/data/specials2.js` | `MOLOTOV_ABILITY`, `LANDMINE_ABILITY`, `CHARGED_SHOT_ABILITY`, `TRAP_ABILITY`, `AUTO_TURRET_ABILITY`, `FREEZE_SHOT_ABILITY`, `FIRE_WALL_ABILITY`, `EMP_BOMB_ABILITY`, `RAGE_ABILITY` → agrupados en `SPECIAL2_CATALOG`. |
-| `src/data/tanks.js` | `ARTILLERY_TANK`, `BREACHER_TANK`, `PRISMA_TANK`, `HUNTER_TANK`, `ENGINEER_TANK`, `CHEMIST_TANK`, `CAIN_TANK`, `NETRUNNER_TANK`, `BERSERKER_TANK` → agrupados en `TANK_TYPES_CATALOG`, más `DIFFICULTY_CONFIG`. |
+| `src/data/specials1.js` | `MORTAR_ABILITY`, `SHOTGUN_ABILITY`, `RICOCHET_ABILITY`, `PIERCING_ABILITY`, `BUILDER_ABILITY`, `TOXIC_ABILITY`, `FIRE_SHOT_ABILITY`, `DRONE_ABILITY`, `BLOODSUCKER_ABILITY`, `SNEAK_STRIKE_ABILITY` → agrupados en `TURRET_CATALOG`. |
+| `src/data/specials2.js` | `MOLOTOV_ABILITY`, `LANDMINE_ABILITY`, `CHARGED_SHOT_ABILITY`, `TRAP_ABILITY`, `AUTO_TURRET_ABILITY`, `FREEZE_SHOT_ABILITY`, `FIRE_WALL_ABILITY`, `EMP_BOMB_ABILITY`, `RAGE_ABILITY`, `TP_ABILITY` → agrupados en `SPECIAL2_CATALOG`. |
+| `src/data/tanks.js` | `ARTILLERY_TANK`, `BREACHER_TANK`, `PRISMA_TANK`, `HUNTER_TANK`, `ENGINEER_TANK`, `CHEMIST_TANK`, `CAIN_TANK`, `NETRUNNER_TANK`, `BERSERKER_TANK`, `ASSASIN_TANK` → agrupados en `TANK_TYPES_CATALOG`, más `DIFFICULTY_CONFIG`. |
 
 #### Motor de simulación (`src/engine/`)
 | Archivo | Funciones y responsabilidad |
 |---|---|
 | `src/engine/mapGenerator.js` | `createSeededRng`, `createEmptyGrid`, `paintRect`, `generateArena` (`bunkers`, `labyrinth`, `open`, `random`). Genera el mapa `120 × 72` de ladrillo y acero; en modo `random` construye desde 0 estructuras aleatorias con garantía de conectividad A*/BFS entre todos los puntos de aparición y soporte de semilla determinista (`mapSeed`) para PvP Legacy. |
 | `src/engine/pathfinding.js` | `isFootprintFree`, `buildWalkableGrid`, `findPathAStar`. Valida colisiones de tamaño `size × size` y calcula rutas A*. |
-| `src/engine/physics.js` | `intersectRayAABB`, `raycastWallDDA`, `findClosestTankHit`, `findNearestEmptyPoint`, `computeOutgoingDamage`, `applyTankDamage`, `applyRadialWallDamage`, `applyRadialTankDamage`, `buildWallBarricade`, `hasLineOfSightToTank`. Trazado de rayos, escalado pasivo de daño, reducción de daño recibida, impacto contra tanques/desplegables y daño/construcción en ladrillos. |
+| `src/engine/physics.js` | `intersectRayAABB`, `raycastWallDDA`, `findClosestTankHit`, `findNearestEmptyPoint`, `computeOutgoingDamage`, `applyTankDamage`, `classifyHitSectorByDir`, `applyRadialWallDamage`, `applyRadialTankDamage`, `buildWallBarricade`, `hasLineOfSightToTank`. Trazado de rayos, escalado/mitigación de daño (`rageActive`, `tpShieldActive`), detección de cara de impacto por `target.dir`, colisión contra tanques/desplegables y daño/construcción en ladrillos. |
 | `src/engine/hazards.js` | `serializeHazardsForPlayer`, `armTeamTraps`, `isTankTouchingCircle`, `isTankTouchingOrientedRect`, `isTankTouchingHazard`, `processMovementWithHazards`, `tickMolotovZones`, `applySingleDoT`, `applyTurnStartPoison`, `computeTurnMoveAp`. Gestiona charcos (`molotov`, `poison`, `fire_pool`), `fire_wall`, minas, trampas invisibles, DoT y cálculo de AP con ralentizaciones. |
-| `src/engine/combat.js` | `resolveShot`. Resuelve cualquier disparo (`normal`, `special`, `special2`), escopeta corta, rebotes, perforación, mortero, muro/torreta/dron desplegable, veneno, congelación, muro de fuego y Bomba PEM. |
-| `src/engine/match.js` | `delay`, `createTankEntity`, `createMatch`, `createPvpMatch`, `getGameActiveTeam`, `getControlledTank`, `checkGameOver`, `serializeGrid`, `serializeState`, `runDeployableTurrets`, `beginAITurn`, `runAITurn`, `advancePvpTurn`. Ciclo de partida PvE y PvP, inicialización de equipos, disparo automático de torretas y lógica de IA. |
-| `src/engine/turnExecutor.js` | `getOwnedDrone`, `broadcastForRecipients`, `maybeAutoEndTurn`, `executeTurnAction`. Ejecutor compartido de acciones (`move_step`, `move_to`, `shoot`, `switch_control`, `end_turn`) para PvE, PvP Ad-Hoc y PvP Legacy con filtrado de trampas por equipo. |
+| `src/engine/combat.js` | `resolveShot`. Resuelve cualquier disparo (`normal`, `special`, `special2`), escopeta corta, rebotes, perforación, `Golpe Trampero` direccional, canalización `TP`, mortero, muro/torreta/dron desplegable, veneno, congelación, muro de fuego y Bomba PEM. |
+| `src/engine/match.js` | `delay`, `createTankEntity`, `createMatch`, `createPvpMatch`, `getGameActiveTeam`, `getControlledTank`, `checkGameOver`, `serializeGrid`, `serializeTanksForPlayer`, `serializeState`, `runDeployableTurrets`, `beginAITurn`, `runAITurn`, `advancePvpTurn`. Ciclo de partida PvE/PvP, ejecución diferida de `TP`, contador de sigilo (`invisibleTurns`), ocultación de unidades invisibles ante rival/IA/torretas y lógica de IA. |
+| `src/engine/turnExecutor.js` | `getOwnedDrone`, `broadcastForRecipients`, `maybeAutoEndTurn`, `executeTurnAction`. Ejecutor compartido de acciones (`move_step`, `move_to`, `shoot`, `switch_control`, `end_turn`) con filtrado de trampas por equipo, enmascaramiento sigiloso en PvP (`stealthMask` para Trampa Invisible y `TP`) y ruptura de invisibilidad al moverse o disparar. |
 
 #### Capa de red (`src/net/`)
 | Archivo | Funciones y responsabilidad |
 |---|---|
 | `src/net/websocket.js` | `encodeWsText`, `decodeWsFrames`. Codificación y decodificación de tramas WebSocket en bruto sobre TCP (`Buffer`). |
-| `src/net/adhocRooms.js` | `createAdhocRoom`, `joinAdhocRoom`, `leaveAdhocRoom`, `handleAdhocGameAction`. Registro de salas Ad-Hoc por código (`player1` Host vs `player2` Invitado), retransmisión por visor y revanchas. |
+| `src/net/adhocRooms.js` | `createAdhocRoom`, `joinAdhocRoom`, `leaveAdhocRoom`, `handleAdhocGameAction`. Registro de salas Ad-Hoc por código (`player1` Host vs `player2` Invitado), antesala interactiva de selección (`adhoc_lobby_state`, `adhoc_lobby_update`, `adhoc_start_match`), retransmisión por visor y revanchas. |
 | `src/net/sessionHandler.js` | `attachWebSocketSession`. Handshake WebSocket (`HTTP 101`), envío inicial del `catalog` + `hostInfo`, gestión de sesión PvE / Ad-Hoc / Legacy (`start_legacy_pvp`, `legacy_remote_action`) y delegación en `turnExecutor` / `adhocRooms`. |
 
 ---
@@ -102,10 +103,10 @@ Cada ficha está definida como un objeto independiente exportable y agrupada en 
 
 | Archivo | Contenido y responsabilidad |
 |---|---|
-| `public/index.html` | Estructura HTML de dos pantallas (`#hangar-screen` y `#battle-screen`), enlaces a `icon.svg` y `manifest.json`, HUD de control, slot de habilidades del tanque seleccionado, overlay de fin de partida y carga de `<script type="module" src="/js/main.js"></script>`. |
+| `public/index.html` | Estructura HTML de pantallas (`#hangar-screen`, `#adhoc-lobby-screen`, `#battle-screen`), enlaces a `icon.svg` y `manifest.json`, HUD de control, slot de habilidades del tanque seleccionado, overlay de fin de partida y carga de `<script type="module" src="/js/main.js"></script>`. |
 | `public/manifest.json` | Manifiesto Web App (`display: "standalone"`) con nombre e icono para ventana de aplicación independiente. |
 | `public/icon.svg` | Icono vectorial Pixel Art del juego para barra de tareas y título de la ventana. |
-| `public/style.css` | Estilos visuales, tema oscuro, diseño de tarjetas del hangar, HUD inferior, paneles laterales y botones. |
+| `public/style.css` | Estilos visuales, tema oscuro, cuadrícula de 3 columnas para tanques ajustada al ancho del panel, tarjetas limpias apoyadas en el display lateral de habilidades, antesala Ad-Hoc, HUD inferior y paneles laterales. |
 | `public/js/constants.js` | Constantes del cliente: `CELL_PX = 8`, `DEFAULT_GRID_W`, `DEFAULT_GRID_H`, `DEFAULT_TANK_SIZE`. |
 | `public/js/state.js` | Estado reactivo compartido (`state`), referencias al canvas principal (`canvas`, `ctx`) y buffer de terreno (`terrainCanvas`, `terrainCtx`), cache de elementos del DOM (`dom`) y `showToast`. |
 | `public/js/main.js` | Punto de entrada ES Module del navegador. Inicializa botones de apagado, UI del hangar, controles de batalla, bucle de renderizado y conexión WebSocket. |
@@ -116,7 +117,7 @@ Cada elemento visual se define como un objeto dedicado y se agrupa por tipo de r
 |---|---|
 | `public/js/assets/palettes.js` | `TRACE_COLORS`, `PARTICLE_PALETTES`, `BRICK_PALETTES`, `SPECIAL2_PREVIEW_COLORS`. |
 | `public/js/assets/terrainSprites.js` | `EMPTY_TILE_SPRITE`, `STEEL_TILE_SPRITE`, `BRICK_TILE_SPRITE` → `TERRAIN_SPRITES`, más `drawCellTile`, `rebuildTerrainCanvas`, `redrawCellsNeighborhood`. |
-| `public/js/assets/tankSprites.js` | Chasis (`LIGHT_CHASSIS_SPRITE`, `MEDIUM_CHASSIS_SPRITE`, `HEAVY_CHASSIS_SPRITE` → `CHASSIS_SPRITES`) y torretas (`MORTAR_TURRET_SPRITE`, `SHOTGUN_TURRET_SPRITE`, `RICOCHET_TURRET_SPRITE`, `BUILDER_TURRET_SPRITE`, `TOXIC_TURRET_SPRITE`, `FIRE_SHOT_TURRET_SPRITE`, `DRONE_TURRET_SPRITE`, `BLOODSUCKER_TURRET_SPRITE`, `PIERCING_TURRET_SPRITE` → `TURRET_SPRITES`), más `drawTankChassis` y `drawTankTurret`. |
+| `public/js/assets/tankSprites.js` | Chasis (`LIGHT_CHASSIS_SPRITE`, `MEDIUM_CHASSIS_SPRITE`, `HEAVY_CHASSIS_SPRITE` → `CHASSIS_SPRITES`) y torretas (`MORTAR_TURRET_SPRITE`, `SHOTGUN_TURRET_SPRITE`, `RICOCHET_TURRET_SPRITE`, `BUILDER_TURRET_SPRITE`, `TOXIC_TURRET_SPRITE`, `FIRE_SHOT_TURRET_SPRITE`, `DRONE_TURRET_SPRITE`, `BLOODSUCKER_TURRET_SPRITE`, `PIERCING_TURRET_SPRITE`, `SNEAK_STRIKE_TURRET_SPRITE` → `TURRET_SPRITES`), más `drawTankChassis` y `drawTankTurret`. |
 | `public/js/assets/deployableSprites.js` | `DRONE_SPRITE`, `AUTO_TURRET_SPRITE` → `DEPLOYABLE_SPRITES`, más `drawDeployable`. |
 | `public/js/assets/hazardSprites.js` | `MOLOTOV_SPRITE`, `POISON_SPRITE`, `FIRE_POOL_SPRITE`, `FIRE_WALL_SPRITE`, `MINE_SPRITE`, `TRAP_SPRITE` → `HAZARD_SPRITES`, más `drawHazard`. |
 
@@ -124,9 +125,9 @@ Cada elemento visual se define como un objeto dedicado y se agrupa por tipo de r
 | Archivo | Funciones y responsabilidad |
 |---|---|
 | `public/js/render/effects.js` | `spawnExplosionParticles`, `drawAimPreview`, `drawActiveTraces`, `drawParticles`, `drawFloatingTexts`. |
-| `public/js/render/renderer.js` | `syncVisualTanks`, `drawStatusRingsAndBadges`, `startRenderLoop`. Bucle `requestAnimationFrame` a 60 FPS con interpolación de movimiento, cola de disparos diferidos (`pendingShots`) e invocación de los renderizadores de terreno, peligros, desplegables, tanques y efectos. |
+| `public/js/render/renderer.js` | `syncVisualTanks`, `drawStatusRingsAndBadges`, `startRenderLoop`. Bucle `requestAnimationFrame` a 60 FPS con interpolación, cola de disparos diferidos (`pendingShots`), ocultación/translucidez de sigilo (`INV Xt`), aura de escudo (`ESC -35%`), marcador privado de `TP` y línea dorada trasera al seleccionar `Golpe Trampero`. |
 | `public/js/ui/hangar.js` | `renderTankSkillsSlot`, `renderTankPreview`, `renderHangarOptions`, `resetBattleVisualState`, `initHangarUI`. Renderiza el Hangar, previsualiza el tanque en canvas, gestiona revanchas y envía `start_game`. |
-| `public/js/ui/multiplayer.js` | `initMultiplayerUI`, `handleAdhocServerMessage`, `updateHostAddrDisplay`, `applySyncModeUI`, `requestLegacyRematch`, `resetMultiplayerOnHangarReturn`. Controla la interfaz de **PvP Ad-Hoc** (crear/unirse por IP+código) y la consola **Hayes 56K Módem 90s** (`PWR/HS/CD/TX/RX`, selección acústico/mismo PC). |
+| `public/js/ui/multiplayer.js` | `initMultiplayerUI`, `handleAdhocServerMessage`, `updateHostAddrDisplay`, `applySyncModeUI`, `requestLegacyRematch`, `resetMultiplayerOnHangarReturn`. Controla la interfaz y antesala **PvP Ad-Hoc** (crear/unirse por IP+código, selección simultánea de tanque/blindaje y mapa por Host) y la consola **Hayes 56K Módem 90s**. |
 | `public/js/ui/hud.js` | `getActiveControlInfo`, `updateHUD`, `selectWeapon`, `initBattleControls`. Gestiona eventos de ratón/teclado/botones con bloqueo por turno activo (`isMyTurn`) y actualiza el HUD de combate, lista de rivales y logs. |
 | `public/js/net/modemAudio.js` | `crc16Ccitt`, `encodePacketFrame`, `modulatePacketToPcm`, `FskStreamDecoder`, `serializeLegacyPacket`, `parseLegacyPacket`, `legacyModem`. Síntesis Web Audio de módem 90s (dial tone, DTMF, `2100 Hz` CED, ruido de portadora V.32bis/V.90) y códec acústico FSK (`1200/2200 Hz`, Goertzel + CRC-16). |
 | `public/js/net/wsClient.js` | `sendLocalWs`, `sendWs`, `connectRemoteAdhoc`, `closeRemoteAdhoc`, `applyShotResolved`, `initShutdownButtons`, `connectWebSocket`. Enruta acciones al servidor local, al Host Ad-Hoc remoto o al transmisor de audio Módem 90s. |
@@ -219,7 +220,8 @@ CLIENTE
      2. `tickMolotovZones()` (`hazards.js`): aplica daño de charcos activos (`molotov`, `poison`, `fire_pool`, `fire_wall`) y expira sus contadores.
      3. `runAITurn()` (`match.js`): para cada IA viva activa trampas (`armTeamTraps`), aplica veneno/fuego (`applyTurnStartPoison`), calcula AP (`computeTurnMoveAp`), busca caminos (`buildWalkableGrid`, `findPathAStar`), comprueba visibilidad (`hasLineOfSightToTank`) y dispara (`resolveShot`). Luego ejecuta `runDeployableTurrets(game, 'ai', ...)` y prepara el siguiente turno del jugador enviando `state`.
 
-7. **Cierre del servidor (`shutdown_server` / `POST /api/shutdown`)**
+7. **Cierre manual y automático del servidor (`shutdown_server` / `POST /api/shutdown` / cierre de ventana)**
+   - Al cerrar la ventana del juego (`pagehide`/`beforeunload`), el cliente envía `navigator.sendBeacon('/api/shutdown')` y al desconectarse el WebSocket local (`onWsDisconnected`) el servidor programa `scheduleIdleShutdown(1500)` para cerrarse solo; en el `.exe`, además, el Win32 Job Object garantiza la terminación al salir.
    - Pulsar **Cerrar Servidor** en `initShutdownButtons()` (`wsClient.js`) llama a `requestServerShutdown()`:
      - Si el WebSocket está abierto, envía `{ type: 'shutdown_server' }` → `sessionHandler.js` responde `server_closing` → `markServerStopped()` en el cliente y ejecuta `shutdownServer()` (`server.js`).
      - Si el WebSocket no está abierto, realiza `fetch('/api/shutdown', { method: 'POST' })` → `server.js` responde JSON `200` y programa `shutdownServer()`, cerrando sockets activos y terminando el proceso Node.js.
