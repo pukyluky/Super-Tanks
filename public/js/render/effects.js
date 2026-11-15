@@ -23,6 +23,20 @@ export function spawnExplosionParticles(gx, gy, radius, kind) {
   }
 }
 
+function drawShotgunReticle(ctx, px, py, angle, pellets, spreadDeg, rangePx, color) {
+  const half = ((spreadDeg * Math.PI) / 180) / 2;
+  ctx.strokeStyle = color;
+  ctx.setLineDash([4, 4]);
+  for (let i = 0; i < pellets; i++) {
+    const offset = pellets === 1 ? 0 : -half + (i / (pellets - 1)) * half * 2;
+    const a = angle + offset;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px + Math.cos(a) * rangePx, py + Math.sin(a) * rangePx);
+    ctx.stroke();
+  }
+}
+
 export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
   const aimUnit = usingDrone ? playerDrone : player;
   if (!player || !player.alive || state.phase !== 'player' || !aimUnit || !aimUnit.canShoot || state.clickMode !== 'shoot') {
@@ -41,16 +55,7 @@ export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
 
   ctx.save();
   if (state.weaponMode === 'normal' && !usingDrone && player.basicWeapon === 'short_shotgun') {
-    const half = ((28 * Math.PI) / 180) / 2;
-    const rangePx = 22 * CELL_PX;
-    ctx.strokeStyle = 'rgba(0, 212, 255, 0.65)';
-    ctx.setLineDash([4, 4]);
-    for (const a of [angle - half, angle, angle + half]) {
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + Math.cos(a) * rangePx, py + Math.sin(a) * rangePx);
-      ctx.stroke();
-    }
+    drawShotgunReticle(ctx, px, py, angle, 4, 28, 22 * CELL_PX, 'rgba(0, 212, 255, 0.72)');
   } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'mortar' && player.specialCooldown === 0) {
     const maxR = state.catalog.turrets.mortar.range;
     const dist = Math.min(maxR, Math.max(6, Math.hypot(state.mouseGrid.x - ox, state.mouseGrid.y - oy)));
@@ -72,15 +77,11 @@ export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
     ctx.fill();
     ctx.stroke();
   } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'shotgun' && player.specialCooldown === 0) {
-    const half = ((state.catalog.turrets.shotgun.spreadDeg * Math.PI) / 180) / 2;
-    ctx.strokeStyle = 'rgba(251, 146, 60, 0.55)';
-    ctx.setLineDash([4, 4]);
-    for (const a of [angle - half, angle, angle + half]) {
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + Math.cos(a) * 260, py + Math.sin(a) * 260);
-      ctx.stroke();
-    }
+    const tu = state.catalog.turrets.shotgun;
+    drawShotgunReticle(ctx, px, py, angle, tu.pellets, tu.spreadDeg, 46 * CELL_PX, 'rgba(251, 146, 60, 0.65)');
+  } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'bloodsucker' && player.specialCooldown === 0) {
+    const tu = state.catalog.turrets.bloodsucker;
+    drawShotgunReticle(ctx, px, py, angle, tu.pellets, tu.spreadDeg, tu.range * CELL_PX, 'rgba(225, 29, 72, 0.8)');
   } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'builder' && player.specialCooldown === 0) {
     const tu = state.catalog.turrets.builder;
     const dist = Math.min(tu.range, Math.max(6, Math.hypot(state.mouseGrid.x - ox, state.mouseGrid.y - oy)));

@@ -4,8 +4,8 @@ const MOLOTOV_ABILITY = {
   cooldown: 3,
   range: 44,
   radius: 4.5,
-  impactDamage: 14,
-  burnDamage: 12,
+  impactDamage: 10,
+  burnDamage: 8,
   duration: 3,
   desc: 'Lanza fuego en área durante 3 turnos: daña al impacto y quema a quien pase o siga dentro.'
 };
@@ -90,6 +90,18 @@ const EMP_BOMB_ABILITY = {
   desc: 'Supresión 2t (-25% mov. y bloquea especiales). Golpe directo: primero 1t aturdido y luego 2t de supresión.'
 };
 
+const RAGE_ABILITY = {
+  id: 'rage',
+  name: 'Ira',
+  cooldown: 0,
+  selfBuff: true,
+  damageReduction: 0.9,
+  moveBonusPercent: 0.25,
+  maxHpPercent: 0.25,
+  duration: 1,
+  desc: 'Solo cuando la vida baja del 25% PV y sin CD (dura 1 turno): reduce 90% el daño recibido y otorga +25% de distancia de desplazamiento.'
+};
+
 const SPECIAL2_CATALOG = {
   molotov: MOLOTOV_ABILITY,
   landmine: LANDMINE_ABILITY,
@@ -98,7 +110,8 @@ const SPECIAL2_CATALOG = {
   auto_turret: AUTO_TURRET_ABILITY,
   freeze_shot: FREEZE_SHOT_ABILITY,
   fire_wall: FIRE_WALL_ABILITY,
-  emp_bomb: EMP_BOMB_ABILITY
+  emp_bomb: EMP_BOMB_ABILITY,
+  rage: RAGE_ABILITY
 };
 
 module.exports = {
@@ -110,5 +123,6 @@ module.exports = {
   FREEZE_SHOT_ABILITY,
   FIRE_WALL_ABILITY,
   EMP_BOMB_ABILITY,
+  RAGE_ABILITY,
   SPECIAL2_CATALOG
 };

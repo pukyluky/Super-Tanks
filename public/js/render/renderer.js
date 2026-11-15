@@ -1,5 +1,5 @@
 import { CELL_PX } from '../constants.js';
-import { state, ctx, terrainCanvas } from '../state.js';
+import { state, getMyTeamId, isMyTurn, ctx, terrainCanvas } from '../state.js';
 import { drawHazard } from '../assets/hazardSprites.js';
 import { drawDeployable } from '../assets/deployableSprites.js';
 import { drawTankChassis, drawTankTurret } from '../assets/tankSprites.js';
@@ -67,6 +67,13 @@ function drawStatusRingsAndBadges(tank, cx, cy, isSpritePass) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    if (tank.rageActive) {
+      ctx.strokeStyle = '#e11d48';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 23, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     return;
   }
 
@@ -74,12 +81,23 @@ function drawStatusRingsAndBadges(tank, cx, cy, isSpritePass) {
   const hpRatio = tank.hp / tank.maxHp;
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(cx - barW / 2, cy - 22, barW, 4);
-  ctx.fillStyle = tank.team === 'player' ? '#4ade80' : '#f87171';
+  ctx.fillStyle = tank.team === getMyTeamId() ? '#4ade80' : '#f87171';
   ctx.fillRect(cx - barW / 2, cy - 22, Math.max(1, barW * hpRatio), 4);
 
-  if ((tank.poisonTurns || 0) > 0 || (tank.burnTurns || 0) > 0 || (tank.stunnedTurns || 0) > 0 || (tank.silencedTurns || 0) > 0) {
+  if (
+    (tank.poisonTurns || 0) > 0 ||
+    (tank.burnTurns || 0) > 0 ||
+    (tank.stunnedTurns || 0) > 0 ||
+    (tank.silencedTurns || 0) > 0 ||
+    tank.rageActive
+  ) {
     ctx.font = 'bold 9px monospace';
     let topOffset = 26;
+    if (tank.rageActive) {
+      ctx.fillStyle = '#fb7185';
+      ctx.fillText('IRA -90%', cx - 18, cy - topOffset);
+      topOffset += 9;
+    }
     if ((tank.poisonTurns || 0) > 0) {
       ctx.fillStyle = '#bef264';
       ctx.fillText(`VEN ${tank.poisonTurns}t`, cx - 14, cy - topOffset);
@@ -119,11 +137,13 @@ export function startRenderLoop(onShotResolved) {
         drawDeployable(ctx, dep);
       }
 
-      const player = state.tanks.find((t) => t.id === 'player');
-      const playerDrone = state.deployables.find((d) => d.kind === 'drone' && d.ownerId === 'player' && d.hp > 0);
+      const myId = getMyTeamId();
+      const myTurn = isMyTurn();
+      const player = state.tanks.find((t) => t.id === myId);
+      const playerDrone = state.deployables.find((d) => d.kind === 'drone' && d.ownerId === myId && d.hp > 0);
       const usingDrone = Boolean(playerDrone) && state.activeControl === 'drone';
 
-      if (player && player.alive && state.phase === 'player' && state.clickMode === 'move') {
+      if (player && player.alive && myTurn && state.clickMode === 'move') {
         const moveUnit = usingDrone ? playerDrone : player;
         if (moveUnit.moveAp > 0) {
           const vt = usingDrone ? null : state.visualTanks.get(player.id);
@@ -179,7 +199,7 @@ export function startRenderLoop(onShotResolved) {
           vt.x += (tank.x - vt.x) * Math.min(1, dt * 16);
           vt.y += (tank.y - vt.y) * Math.min(1, dt * 16);
           vt.dir = tank.dir;
-          if (tank.id !== 'player' && vt.pendingShots.length === 0) {
+          if ((tank.id !== myId || !myTurn) && vt.pendingShots.length === 0) {
             vt.aimAngle = tank.aimAngle;
           }
         }
@@ -197,7 +217,9 @@ export function startRenderLoop(onShotResolved) {
         drawStatusRingsAndBadges(tank, cx, cy, false);
       }
 
-      drawAimPreview(ctx, player, playerDrone, usingDrone);
+      if (myTurn) {
+        drawAimPreview(ctx, player, playerDrone, usingDrone);
+      }
       drawActiveTraces(ctx, now);
       drawParticles(ctx, dt);
       drawFloatingTexts(ctx, dt);

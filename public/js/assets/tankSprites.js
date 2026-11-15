@@ -108,6 +108,19 @@ export const DRONE_TURRET_SPRITE = {
   }
 };
 
+export const BLOODSUCKER_TURRET_SPRITE = {
+  draw(c) {
+    c.fillStyle = '#1f2937';
+    c.fillRect(2, -5, 11, 4);
+    c.fillRect(2, 1, 11, 4);
+    c.fillStyle = '#e11d48';
+    c.fillRect(9, -6, 5, 3);
+    c.fillRect(9, 3, 5, 3);
+    c.fillStyle = '#fda4af';
+    c.fillRect(12, -2, 3, 4);
+  }
+};
+
 export const PIERCING_TURRET_SPRITE = {
   draw(c) {
     c.fillStyle = '#0f172a';
@@ -125,6 +138,7 @@ export const TURRET_SPRITES = {
   toxic: TOXIC_TURRET_SPRITE,
   fire_shot: FIRE_SHOT_TURRET_SPRITE,
   drone: DRONE_TURRET_SPRITE,
+  bloodsucker: BLOODSUCKER_TURRET_SPRITE,
   piercing: PIERCING_TURRET_SPRITE
 };
 

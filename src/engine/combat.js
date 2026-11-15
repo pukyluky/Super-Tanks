@@ -11,6 +11,8 @@ const {
   raycastWallDDA,
   findClosestTankHit,
   findNearestEmptyPoint,
+  computeOutgoingDamage,
+  applyTankDamage,
   applyRadialWallDamage,
   applyRadialTankDamage,
   buildWallBarricade
@@ -31,7 +33,8 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
     traces: [],
     explosions: [],
     damagedCells: [],
-    tankHits: []
+    tankHits: [],
+    heals: []
   };
 
   const mergeCellChanges = (changes) => {
@@ -40,21 +43,21 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
     }
   };
 
-  const recordTankDirectHit = (tank, dmg, hx, hy) => {
-    tank.hp = Math.max(0, tank.hp - dmg);
-    if (tank.hp === 0) tank.alive = false;
+  const recordTankDirectHit = (tank, rawDmg, hx, hy) => {
+    const dealt = applyTankDamage(tank, rawDmg);
     events.tankHits.push({
       tankId: tank.id,
       tankName: tank.name,
-      damage: dmg,
+      damage: dealt,
       remainingHp: tank.hp,
       destroyed: !tank.alive,
       x: hx,
       y: hy
     });
+    return dealt;
   };
 
-  const recordTargetHit = (hit, dmg, hx, hy) => {
+  const recordTargetHit = (hit, rawDmg, hx, hy) => {
     if (hit.kind === 'deployable') {
       const dep = hit.deployable;
       dep.hp = Math.max(0, dep.hp - 1);
@@ -67,13 +70,15 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
         x: hx,
         y: hy
       });
-      return;
+      return 0;
     }
-    recordTankDirectHit(hit.tank, dmg, hx, hy);
+    return recordTankDirectHit(hit.tank, rawDmg, hx, hy);
   };
 
   const fireShotgunFan = (pellets, spreadDeg, range, pelletDamage, wallRadius, kind) => {
+    const scaledPelletDmg = computeOutgoingDamage(shooter, pelletDamage);
     const halfSpread = ((spreadDeg * Math.PI) / 180) / 2;
+    let totalTankDamage = 0;
     for (let i = 0; i < pellets; i++) {
       const offset = pellets === 1 ? 0 : -halfSpread + (i / (pellets - 1)) * halfSpread * 2;
       const a = angle + offset;
@@ -85,7 +90,7 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
       if (targetHit) {
         events.traces.push({ x1: ox, y1: oy, x2: targetHit.x, y2: targetHit.y, kind });
         events.explosions.push({ x: targetHit.x, y: targetHit.y, radius: 1.4, kind });
-        recordTargetHit(targetHit, pelletDamage, targetHit.x, targetHit.y);
+        totalTankDamage += recordTargetHit(targetHit, scaledPelletDmg, targetHit.x, targetHit.y);
       } else {
         events.traces.push({ x1: ox, y1: oy, x2: wallHit.x, y2: wallHit.y, kind });
         events.explosions.push({ x: wallHit.x, y: wallHit.y, radius: 1.5, kind });
@@ -94,6 +99,7 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
         }
       }
     }
+    return totalTankDamage;
   };
 
   // MODO NORMAL: Cañón estándar 360°, escopeta corta (NetRunner) o tiro de dron (20 PV)
@@ -132,7 +138,7 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
     if (targetHit) {
       events.traces.push({ x1: ox, y1: oy, x2: targetHit.x, y2: targetHit.y, kind: 'standard' });
       events.explosions.push({ x: targetHit.x, y: targetHit.y, radius: 2.0, kind: 'standard' });
-      recordTargetHit(targetHit, 24, targetHit.x, targetHit.y);
+      recordTargetHit(targetHit, computeOutgoingDamage(shooter, 24), targetHit.x, targetHit.y);
       mergeCellChanges(applyRadialWallDamage(game.grid, targetHit.x, targetHit.y, 1.8, 2, 0.8));
     } else {
       events.traces.push({ x1: ox, y1: oy, x2: wallHit.x, y2: wallHit.y, kind: 'standard' });
@@ -146,6 +152,20 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
 
   // MODO ESPECIAL 2
   if (mode === 'special2' && sp2) {
+    if (sp2.id === 'rage') {
+      if (shooter.rageActive || !(shooter.hp < shooter.maxHp * sp2.maxHpPercent)) {
+        return events;
+      }
+      shooter.rageActive = true;
+      shooter.rageDamageReduction = sp2.damageReduction;
+      shooter.special2Cooldown = sp2.cooldown;
+      const bonusAp = Math.max(1, Math.round((shooter.maxMoveAp || 1) * sp2.moveBonusPercent));
+      shooter.moveAp = (shooter.moveAp || 0) + bonusAp;
+      events.rageBonusAp = bonusAp;
+      events.explosions.push({ x: ox, y: oy, radius: 3.0, kind: 'rage' });
+      return events;
+    }
+
     if (sp2.id === 'charged_shot') {
       if (!shooter.chargedReady) {
         shooter.chargedReady = true;
@@ -304,7 +324,13 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
         kind: 'auto_turret',
         team: shooter.team,
         ownerId: shooter.id,
-        name: shooter.team === 'player' ? 'Torreta Aliada' : 'Torreta IA',
+        name: shooter.team === 'player'
+          ? 'Torreta Aliada'
+          : shooter.team === 'player1'
+            ? 'Torreta J1'
+            : shooter.team === 'player2'
+              ? 'Torreta J2'
+              : 'Torreta IA',
         x: tx,
         y: ty,
         size: 2,
@@ -399,10 +425,41 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
     events.explosions.push({ x: ix, y: iy, radius: turret.specialRadius, kind: 'mortar' });
 
     mergeCellChanges(applyRadialWallDamage(game.grid, ix, iy, turret.specialRadius, 4, 0.65));
-    const splashHits = applyRadialTankDamage(game.tanks, ix, iy, turret.specialRadius + 1.2, turret.specialDamage, 14, game.deployables);
+    const splashHits = applyRadialTankDamage(
+      game.tanks,
+      ix,
+      iy,
+      turret.specialRadius + 1.2,
+      computeOutgoingDamage(shooter, turret.specialDamage),
+      computeOutgoingDamage(shooter, 14),
+      game.deployables
+    );
     events.tankHits.push(...splashHits);
   } else if (shooter.turretId === 'shotgun') {
     fireShotgunFan(turret.pellets, turret.spreadDeg, 46, turret.pelletDamage, turret.specialRadius, 'shotgun');
+  } else if (shooter.turretId === 'bloodsucker') {
+    const dealtTankDmg = fireShotgunFan(
+      turret.pellets,
+      turret.spreadDeg,
+      turret.range,
+      turret.pelletDamage,
+      turret.specialRadius,
+      'bloodsucker'
+    );
+    if (dealtTankDmg > 0 && shooter.alive) {
+      const rawHeal = Math.max(1, Math.round(dealtTankDmg * turret.lifesteal));
+      const actualHeal = Math.min(Math.max(0, shooter.maxHp - shooter.hp), rawHeal);
+      shooter.hp = Math.min(shooter.maxHp, shooter.hp + rawHeal);
+      events.heals.push({
+        tankId: shooter.id,
+        tankName: shooter.name,
+        amount: actualHeal,
+        rawHeal,
+        remainingHp: shooter.hp,
+        x: ox,
+        y: oy
+      });
+    }
   } else if (shooter.turretId === 'ricochet') {
     let curX = ox;
     let curY = oy;
@@ -571,7 +628,13 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
       ownerId: shooter.id,
       turretId: shooter.turretId,
       special2Id: shooter.special2Id,
-      name: shooter.team === 'player' ? 'Dron NetRunner' : 'Dron IA',
+      name: shooter.team === 'player'
+        ? 'Dron NetRunner'
+        : shooter.team === 'player1'
+          ? 'Dron J1'
+          : shooter.team === 'player2'
+            ? 'Dron J2'
+            : 'Dron IA',
       x: tx,
       y: ty,
       size: 2,

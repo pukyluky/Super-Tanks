@@ -199,6 +199,26 @@ function applyRadialWallDamage(grid, cx, cy, radius, maxDamage, falloff = 0.75) 
   return changed;
 }
 
+function computeOutgoingDamage(shooter, baseDamage) {
+  if (!shooter || shooter.passive !== 'berserk' || !(shooter.maxHp > 0)) {
+    return baseDamage;
+  }
+  const missingRatio = Math.max(0, (shooter.maxHp - shooter.hp) / shooter.maxHp);
+  return Math.max(1, Math.round(baseDamage * (1 + missingRatio)));
+}
+
+function applyTankDamage(tank, rawDamage) {
+  if (!tank || !tank.alive || rawDamage <= 0) return 0;
+  let finalDmg = rawDamage;
+  if (tank.rageActive) {
+    const red = tank.rageDamageReduction ?? 0.9;
+    finalDmg = Math.max(1, Math.round(rawDamage * (1 - red)));
+  }
+  tank.hp = Math.max(0, tank.hp - finalDmg);
+  if (tank.hp === 0) tank.alive = false;
+  return finalDmg;
+}
+
 function applyRadialTankDamage(tanks, cx, cy, radius, maxDamage, minDamage = 10, deployables = []) {
   const hits = [];
   for (const tank of tanks) {
@@ -208,9 +228,8 @@ function applyRadialTankDamage(tanks, cx, cy, radius, maxDamage, minDamage = 10,
     const dist = Math.hypot(nearestX - cx, nearestY - cy);
     if (dist <= radius) {
       const ratio = 1 - dist / (radius + 0.001);
-      const dmg = Math.max(minDamage, Math.round(maxDamage * (0.4 + 0.6 * ratio)));
-      tank.hp = Math.max(0, tank.hp - dmg);
-      if (tank.hp === 0) tank.alive = false;
+      const rawDmg = Math.max(minDamage, Math.round(maxDamage * (0.4 + 0.6 * ratio)));
+      const dmg = applyTankDamage(tank, rawDmg);
       hits.push({
         tankId: tank.id,
         tankName: tank.name,
@@ -284,17 +303,65 @@ function buildWallBarricade(grid, tanks, cx, cy, angle, length, thickness, wallH
   return changed;
 }
 
-function hasLineOfSightToTank(grid, tanks, shooter, target) {
-  const ox = shooter.x + TANK_SIZE / 2;
-  const oy = shooter.y + TANK_SIZE / 2;
-  const tx = target.x + TANK_SIZE / 2;
-  const ty = target.y + TANK_SIZE / 2;
+function hasLineOfSightToEntity(grid, tanks, shooter, target, deployables = []) {
+  if (!shooter || !target) return false;
+  const sSize = shooter.size || TANK_SIZE;
+  const tSize = target.size || TANK_SIZE;
+  const ox = shooter.x + sSize / 2;
+  const oy = shooter.y + sSize / 2;
+  const tx = target.x + tSize / 2;
+  const ty = target.y + tSize / 2;
   const angle = Math.atan2(ty - oy, tx - ox);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   const wallHit = raycastWallDDA(grid, ox, oy, dx, dy, 180);
-  const tankHit = findClosestTankHit(tanks, ox, oy, dx, dy, wallHit.t, shooter.id);
-  return tankHit && tankHit.tank.id === target.id;
+  const hit = findClosestTankHit(tanks, ox, oy, dx, dy, wallHit.t, shooter.id, deployables);
+  if (!hit) return false;
+  return hit.kind === 'tank' ? hit.tank.id === target.id : hit.deployable.id === target.id;
+}
+
+function hasLineOfSightToTank(grid, tanks, shooter, target, deployables = []) {
+  return hasLineOfSightToEntity(grid, tanks, shooter, target, deployables);
+}
+
+function isTankExposedToObserverAt(grid, tanks, observer, targetTankId, posX, posY, deployables = []) {
+  if (!observer) return false;
+  const oSize = observer.size || TANK_SIZE;
+  const ox = observer.x + oSize / 2;
+  const oy = observer.y + oSize / 2;
+
+  const samplePoints = [
+    { x: posX + TANK_SIZE / 2, y: posY + TANK_SIZE / 2 },
+    { x: posX + 0.5, y: posY + 0.5 },
+    { x: posX + TANK_SIZE - 0.5, y: posY + 0.5 },
+    { x: posX + 0.5, y: posY + TANK_SIZE - 0.5 },
+    { x: posX + TANK_SIZE - 0.5, y: posY + TANK_SIZE - 0.5 }
+  ];
+
+  for (const pt of samplePoints) {
+    const dxRaw = pt.x - ox;
+    const dyRaw = pt.y - oy;
+    const dist = Math.hypot(dxRaw, dyRaw);
+    if (dist < 0.01) return true;
+    const dx = dxRaw / dist;
+    const dy = dyRaw / dist;
+    const wallHit = raycastWallDDA(grid, ox, oy, dx, dy, Math.min(180, dist + 1));
+    if (wallHit.t + 0.05 >= dist) {
+      // Comprobar que no haya otro tanque/desplegable tapando el rayo
+      const otherHit = findClosestTankHit(
+        tanks.filter((t) => t.id !== targetTankId),
+        ox,
+        oy,
+        dx,
+        dy,
+        dist,
+        observer.id,
+        deployables
+      );
+      if (!otherHit) return true;
+    }
+  }
+  return false;
 }
 
 module.exports = {
@@ -302,8 +369,12 @@ module.exports = {
   raycastWallDDA,
   findClosestTankHit,
   findNearestEmptyPoint,
+  computeOutgoingDamage,
+  applyTankDamage,
   applyRadialWallDamage,
   applyRadialTankDamage,
   buildWallBarricade,
-  hasLineOfSightToTank
+  hasLineOfSightToEntity,
+  hasLineOfSightToTank,
+  isTankExposedToObserverAt
 };

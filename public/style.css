@@ -118,12 +118,6 @@ body {
   }
 }
 
-@media (max-width: 720px) {
-  .hangar-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .skills-slot {
   display: flex;
   flex-direction: column;
@@ -735,4 +729,1035 @@ button {
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+/* ---------------- MULTIJUGADOR & MÓDEM 90s ---------------- */
+.mp-box {
+  background: rgba(11, 15, 23, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-subtabs,
+.mp-actions-row,
+.mp-field-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mp-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mp-input {
+  flex: 1;
+  min-width: 140px;
+  background: #0b101b;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.mp-input.code-input {
+  flex: 0 0 88px;
+  min-width: 78px;
+  text-transform: uppercase;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.btn-mini {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.mp-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.mp-status-card strong {
+  color: #38bdf8;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+
+.modem-box {
+  border-color: #2f4b38;
+  background: #07110b;
+}
+
+.modem-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.modem-brand {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 800;
+  color: #4ade80;
+  letter-spacing: 0.8px;
+}
+
+.modem-leds {
+  display: flex;
+  gap: 4px;
+}
+
+.led {
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #1a241d;
+  color: #506657;
+  border: 1px solid #26382b;
+}
+
+.led.on {
+  background: #14532d;
+  color: #4ade80;
+  border-color: #22c55e;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+
+.led.on.tx {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+}
+
+.led.on.rx {
+  background: #78350f;
+  color: #fde047;
+  border-color: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.65);
+}
+
+.modem-meter-wrap {
+  height: 5px;
+  background: #111c14;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #233829;
+}
+
+.modem-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+  transition: width 60ms linear;
+}
+
+.modem-lcd {
+  font-family: monospace;
+  font-size: 11px;
+  color: #86efac;
+  background: #030a05;
+  border: 1px solid #1d3524;
+  border-radius: 4px;
+  padding: 5px 7px;
+  line-height: 1.3;
+}
+
+/* ---------------- TARJETAS ENRIQUECIDAS (DESKTOP Y MÓVIL) ---------------- */
+.tank-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tank-mini-canvas {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  background: #0a101b;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  image-rendering: pixelated;
+}
+
+.tank-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tank-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mini-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #101827;
+  border: 1px solid var(--border);
+  color: #cbd5e1;
+}
+
+.mini-badge.sp1 {
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.mini-badge.sp2 {
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.mini-badge.pas {
+  color: #fda4af;
+  border-color: rgba(244, 63, 94, 0.45);
+}
+
+.armor-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.armor-bar-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.armor-bar-track {
+  height: 6px;
+  background: #0a0f18;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #222e42;
+}
+
+.armor-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.armor-bar-fill.hp {
+  background: linear-gradient(90deg, #16a34a, #4ade80);
+}
+
+.armor-bar-fill.ap {
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+}
+
+.diff-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.diff-meta {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wizard-subblock + .wizard-subblock {
+  margin-top: 12px;
+}
+
+/* ---------------- CONTROLES Y ADAPTACIÓN MÓVIL ---------------- */
+.mode-switch-group,
+.combat-weapons-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-fire {
+  background: linear-gradient(135deg, #dc2626, #f97316);
+  color: #fff7ed;
+  border: 1px solid rgba(251, 146, 60, 0.75);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+}
+
+.btn-fire:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn-fire:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.mobile-only,
+.mobile-only-block,
+.mobile-side-controls,
+.wizard-steps,
+.wizard-nav-btn,
+.mobile-summary-card {
+  display: none;
+}
+
+/* ---------------- WIZARD HANGAR MÓVIL (4 PANTALLAS) ---------------- */
+body.mobile-mode .mobile-only {
+  display: inline-flex;
+  align-items: center;
+}
+
+body.mobile-mode .mobile-only-block {
+  display: block;
+}
+
+body.mobile-mode .screen {
+  padding: 6px;
+}
+
+body.mobile-mode #hangar-screen {
+  align-items: stretch;
+  justify-content: flex-start;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.mobile-mode .hangar-card {
+  height: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+body.mobile-mode .hangar-header {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+body.mobile-mode .hangar-header .badge,
+body.mobile-mode .hangar-header .subtitle {
+  display: none;
+}
+
+body.mobile-mode .hangar-header h1 {
+  font-size: 16px;
+}
+
+body.mobile-mode .preview-box {
+  flex-direction: row;
+  gap: 6px;
+  padding: 3px 8px;
+}
+
+body.mobile-mode #tank-preview-canvas {
+  width: 38px;
+  height: 38px;
+}
+
+body.mobile-mode #preview-label {
+  margin-top: 0;
+  font-size: 10px;
+}
+
+body.mobile-mode .wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+body.mobile-mode .wizard-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: #0c121c;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+body.mobile-mode .wizard-step-btn .step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: #172233;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+body.mobile-mode .wizard-step-btn .step-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body.mobile-mode .wizard-step-btn .step-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.mobile-mode .wizard-step-btn .step-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.mobile-mode .wizard-step-btn.done {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+body.mobile-mode .wizard-step-btn.done .step-num {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+body.mobile-mode .wizard-step-btn.active {
+  border-color: var(--primary);
+  background: rgba(56, 189, 248, 0.16);
+  color: #e0f2fe;
+}
+
+body.mobile-mode .wizard-step-btn.active .step-num {
+  background: var(--primary);
+  color: #04131e;
+}
+
+body.mobile-mode .hangar-grid {
+  flex: 1;
+  min-height: 0;
+  display: block;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+}
+
+body.mobile-mode .hangar-grid .panel,
+body.mobile-mode .hangar-grid .wizard-subblock,
+body.mobile-mode .controls-preview {
+  display: none;
+}
+
+body.mobile-mode #hangar-screen[data-mobile-step="1"] #panel-step-tank {
+  display: block;
+}
+
+body.mobile-mode #hangar-screen[data-mobile-step="2"] #panel-step-armor {
+  display: block;
+}
+
+body.mobile-mode #hangar-screen[data-mobile-step="3"] #panel-step-scenario,
+body.mobile-mode #hangar-screen[data-mobile-step="3"] #step-difficulty-block {
+  display: block;
+}
+
+body.mobile-mode #hangar-screen[data-mobile-step="4"] #panel-step-scenario,
+body.mobile-mode #hangar-screen[data-mobile-step="4"] #step-map-block {
+  display: block;
+}
+
+body.mobile-mode .panel {
+  padding: 10px;
+}
+
+body.mobile-mode .panel h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+body.mobile-mode #tank-type-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+body.mobile-mode.portrait-mode #tank-type-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.mobile-mode #armor-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.mobile-mode.portrait-mode #armor-options {
+  grid-template-columns: 1fr;
+}
+
+body.mobile-mode #difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.mobile-mode.portrait-mode #difficulty-options {
+  grid-template-columns: 1fr;
+}
+
+body.mobile-mode .diff-pill {
+  padding: 12px 10px;
+  font-size: 14px;
+}
+
+body.mobile-mode #map-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.mobile-mode.portrait-mode #map-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.mobile-mode #map-options .pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 4px;
+  padding: 10px;
+  font-size: 13px;
+}
+
+body.mobile-mode #map-options .pill::after {
+  content: attr(data-desc);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+body.mobile-mode .option-card {
+  padding: 8px;
+}
+
+body.mobile-mode .option-title {
+  font-size: 12.5px;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+body.mobile-mode .option-desc {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+body.mobile-mode .mobile-summary-card {
+  margin-top: 8px;
+  background: rgba(11, 15, 23, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+body.mobile-mode .summary-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+body.mobile-mode .summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+body.mobile-mode .summary-chip {
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #0e1625;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+body.mobile-mode .hangar-footer {
+  flex-shrink: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+body.mobile-mode .ws-status {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.mobile-mode .footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body.mobile-mode .wizard-nav-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---------------- BATALLA MÓVIL CON DOBLE JOYSTICK ---------------- */
+body.mobile-mode #battle-screen {
+  padding: 4px 6px;
+  gap: 4px;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body.mobile-mode .hud-top {
+  padding: 4px 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+body.mobile-mode .hud-group {
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body.mobile-mode .stat-label {
+  display: none;
+}
+
+body.mobile-mode .hp-bar-wrap {
+  width: 96px;
+  height: 16px;
+}
+
+body.mobile-mode .btn-tool,
+body.mobile-mode .btn-weapon,
+body.mobile-mode .btn-accent,
+body.mobile-mode .btn-ghost,
+body.mobile-mode .btn-danger,
+body.mobile-mode .btn-fire {
+  padding: 5px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+body.mobile-mode .divider,
+body.mobile-mode .mode-switch-group,
+body.mobile-mode .hud-top .combat-weapons-group,
+body.mobile-mode .help-panel {
+  display: none;
+}
+
+body.mobile-mode .mobile-side-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  user-select: none;
+  touch-action: none;
+}
+
+body.mobile-mode.landscape-mode .battle-main {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+body.mobile-mode.landscape-mode .mobile-side-controls {
+  padding: 4px;
+  background: rgba(13, 19, 30, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 116px;
+}
+
+body.mobile-mode .canvas-wrapper {
+  min-width: 0;
+  min-height: 0;
+  padding: 3px;
+}
+
+.joystick-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.joystick-base {
+  position: relative;
+  width: clamp(92px, 24dvh, 126px);
+  height: clamp(92px, 24dvh, 126px);
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.92) 0%, rgba(11, 15, 23, 0.96) 100%);
+  border: 2px solid rgba(56, 189, 248, 0.45);
+  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.7), 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.joystick-base.joystick-aim {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.joystick-base.active {
+  border-color: #38bdf8;
+  box-shadow: inset 0 0 16px rgba(56, 189, 248, 0.25), 0 0 14px rgba(56, 189, 248, 0.35);
+}
+
+.joystick-base.joystick-aim.active {
+  border-color: #fbbf24;
+  box-shadow: inset 0 0 16px rgba(245, 158, 11, 0.25), 0 0 14px rgba(245, 158, 11, 0.35);
+}
+
+.joystick-base.disabled {
+  opacity: 0.42;
+}
+
+.joystick-thumb {
+  width: 42%;
+  height: 42%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7dd3fc, #0284c7);
+  border: 2px solid #e0f2fe;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  transition: transform 0.04s linear;
+}
+
+.joystick-aim .joystick-thumb {
+  background: radial-gradient(circle at 35% 30%, #fde68a, #d97706);
+  border-color: #fffbeb;
+}
+
+.joy-dir {
+  position: absolute;
+  font-size: 10px;
+  color: rgba(147, 164, 191, 0.55);
+  pointer-events: none;
+}
+
+.joy-dir-up { top: 5px; left: 50%; transform: translateX(-50%); }
+.joy-dir-down { bottom: 5px; left: 50%; transform: translateX(-50%); }
+.joy-dir-left { left: 7px; top: 50%; transform: translateY(-50%); }
+.joy-dir-right { right: 7px; top: 50%; transform: translateY(-50%); }
+
+.joy-crosshair {
+  position: absolute;
+  inset: 18%;
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.joystick-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.mobile-weapons-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 136px;
+}
+
+.mobile-weapons-stack .btn-weapon {
+  padding: 4px 6px;
+  font-size: 10px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-fire-big {
+  width: 100%;
+  max-width: 136px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+}
+
+/* Sidebar móvil como panel desplegable para no tapar el campo ni joysticks */
+body.mobile-mode .sidebar {
+  display: none;
+}
+
+body.mobile-mode #battle-screen.sidebar-open .sidebar {
+  display: flex;
+  position: fixed;
+  top: 46px;
+  right: 8px;
+  bottom: 8px;
+  width: min(310px, 84vw);
+  z-index: 60;
+  background: rgba(11, 15, 23, 0.96);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.8);
+  overflow-y: auto;
+}
+
+body.mobile-mode .mobile-sidebar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--primary);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Modo vertical en navegador móvil */
+body.mobile-mode.portrait-mode .battle-main {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(210px, 1fr) auto;
+  gap: 6px;
+}
+
+body.mobile-mode.portrait-mode .canvas-wrapper {
+  grid-column: 1 / -1;
+}
+
+body.mobile-mode.portrait-mode .mobile-side-controls {
+  padding: 6px;
+  background: rgba(13, 19, 30, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+body.mobile-mode.portrait-mode .joystick-base {
+  width: 104px;
+  height: 104px;
+}
+
+/* Cruceta (D-Pad) seleccionable en Ajustes */
+.mobile-dpad {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  touch-action: none;
+  user-select: none;
+}
+
+.mobile-dpad.disabled {
+  opacity: 0.42;
+}
+
+body[data-control-type="dpad"] #joy-move {
+  display: none;
+}
+
+body[data-control-type="dpad"] .mobile-dpad {
+  display: flex;
+}
+
+.dpad-mid {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.dpad-btn {
+  width: clamp(32px, 8.8dvh, 42px);
+  height: clamp(32px, 8.8dvh, 42px);
+  border-radius: 9px;
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+  font-size: 15px;
+  font-weight: 800;
+  touch-action: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dpad-btn.dpad-center {
+  background: rgba(11, 15, 23, 0.75);
+  border-color: rgba(42, 54, 76, 0.7);
+  color: var(--muted);
+  cursor: default;
+}
+
+.dpad-btn.active,
+.dpad-btn:active:not(:disabled) {
+  background: rgba(56, 189, 248, 0.42);
+  border-color: #7dd3fc;
+  transform: scale(0.94);
+}
+
+/* ---------------- MODAL DE AJUSTES ---------------- */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  padding: 12px;
+  background: rgba(4, 8, 15, 0.82);
+  backdrop-filter: blur(3px);
+}
+
+.settings-card {
+  width: 100%;
+  max-width: 500px;
+  max-height: 92dvh;
+  overflow-y: auto;
+  text-align: left;
+  padding: 16px 18px;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header h2 {
+  font-size: 18px;
+  margin-bottom: 0;
+  color: var(--primary);
+}
+
+.settings-section {
+  margin-bottom: 14px;
+}
+
+.settings-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.settings-slider-head .section-label {
+  margin-bottom: 0;
+}
+
+.sensitivity-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.settings-range {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+  height: 26px;
+}
+
+.settings-presets {
+  margin-top: 6px;
+  gap: 6px;
+}
+
+.settings-presets .pill {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+
+.settings-hint {
+  margin-top: 6px;
+  margin-bottom: 0 !important;
+  font-size: 11.5px !important;
+  color: var(--muted);
+}
+
+.settings-footer {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 520px) {
+  body.mobile-mode #tank-type-options {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-choice-grid {
+    grid-template-columns: 1fr;
+  }
 }

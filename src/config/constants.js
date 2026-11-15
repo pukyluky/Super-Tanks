@@ -1,6 +1,6 @@
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 
 // Dimensiones de la micro-cuadrícula (120x72 micro-casillas de 8x8 px => 960x576 px)
@@ -22,6 +22,7 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon'
 };
 

@@ -5,7 +5,7 @@ const MORTAR_ABILITY = {
   name: 'Mortero Táctico',
   cooldown: 2,
   range: 62.4,
-  specialDamage: 35,
+  specialDamage: 20,
   specialRadius: 4.8,
   desc: 'Salta muros hasta el punto apuntado y abre enormes cráteres con daño radial.'
 };
@@ -90,6 +90,19 @@ const DRONE_ABILITY = {
   desc: 'Despliega un dron controlable (2 PV, 18 AP) en el mismo turno: dispara (20 daño) o lanza Bomba PEM (CD dron 3t / tanque 4t).'
 };
 
+const BLOODSUCKER_ABILITY = {
+  id: 'bloodsucker',
+  name: 'Chupasangre',
+  cooldown: 4,
+  pellets: 7,
+  spreadDeg: 32,
+  range: 26,
+  pelletDamage: 5,
+  lifesteal: 0.3,
+  specialRadius: 1.4,
+  desc: 'Escopeta corta (7 perdigones de 5 daño, rango 26): recupera un 30% del daño infligido en impacto como vida.'
+};
+
 const TURRET_CATALOG = {
   mortar: MORTAR_ABILITY,
   shotgun: SHOTGUN_ABILITY,
@@ -98,7 +111,8 @@ const TURRET_CATALOG = {
   builder: BUILDER_ABILITY,
   toxic: TOXIC_ABILITY,
   fire_shot: FIRE_SHOT_ABILITY,
-  drone: DRONE_ABILITY
+  drone: DRONE_ABILITY,
+  bloodsucker: BLOODSUCKER_ABILITY
 };
 
 module.exports = {
@@ -110,5 +124,6 @@ module.exports = {
   TOXIC_ABILITY,
   FIRE_SHOT_ABILITY,
   DRONE_ABILITY,
+  BLOODSUCKER_ABILITY,
   TURRET_CATALOG
 };

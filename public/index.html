@@ -2,14 +2,16 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tanques Tácticos 2D — Prototipo Pixel Art</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Tanques Tácticos 2D</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="manifest" href="/manifest.json" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div id="app">
     <!-- PANTALLA DE SELECCIÓN DE TANQUE (HANGAR) -->
-    <section id="hangar-screen" class="screen">
+    <section id="hangar-screen" class="screen" data-mobile-step="1">
       <div class="hangar-card">
         <header class="hangar-header">
           <div>
@@ -23,36 +25,139 @@
           </div>
         </header>
 
+        <!-- BARRA DE PASOS PARA MÓVIL (4 PANTALLAS) -->
+        <nav id="mobile-wizard-steps" class="wizard-steps mobile-only-block" aria-label="Pasos de configuración">
+          <button type="button" class="wizard-step-btn active" data-step="1">
+            <span class="step-num">1</span>
+            <span class="step-meta">
+              <span class="step-title">Tanque</span>
+              <span class="step-val" id="step-val-1">—</span>
+            </span>
+          </button>
+          <button type="button" class="wizard-step-btn" data-step="2">
+            <span class="step-num">2</span>
+            <span class="step-meta">
+              <span class="step-title">Blindaje</span>
+              <span class="step-val" id="step-val-2">—</span>
+            </span>
+          </button>
+          <button type="button" class="wizard-step-btn" data-step="3">
+            <span class="step-num">3</span>
+            <span class="step-meta">
+              <span class="step-title">Dificultad</span>
+              <span class="step-val" id="step-val-3">—</span>
+            </span>
+          </button>
+          <button type="button" class="wizard-step-btn" data-step="4">
+            <span class="step-num">4</span>
+            <span class="step-meta">
+              <span class="step-title">Mapa</span>
+              <span class="step-val" id="step-val-4">—</span>
+            </span>
+          </button>
+        </nav>
+
         <div class="hangar-grid">
-          <div class="panel">
+          <div id="panel-step-tank" class="panel" data-wizard-panel="1">
             <h2>1. Elige Tipo de Tanque</h2>
             <div id="tank-type-options" class="option-list"></div>
           </div>
 
-          <div class="panel">
+          <div id="panel-step-skills" class="panel" data-wizard-panel="skills">
             <h2>2. Habilidades del Tanque</h2>
             <div id="tank-skills-slot" class="skills-slot"></div>
           </div>
 
-          <div class="panel">
+          <div id="panel-step-armor" class="panel" data-wizard-panel="2">
             <h2>3. Elige Blindaje</h2>
             <div id="armor-options" class="option-list"></div>
           </div>
 
-          <div class="panel">
-            <h2>4. Dificultad y Escenario</h2>
-            <div class="sub-section">
-              <label class="section-label">Dificultad de la IA</label>
-              <div id="difficulty-options" class="pill-row"></div>
-            </div>
-            <div class="sub-section">
-              <label class="section-label">Mapa</label>
-              <div id="map-options" class="pill-row">
-                <button class="pill active" data-map="bunkers">Búnkeres</button>
-                <button class="pill" data-map="labyrinth">Laberinto</button>
-                <button class="pill" data-map="open">Campo Abierto</button>
+          <div id="panel-step-scenario" class="panel" data-wizard-panel="3-4">
+            <div id="step-difficulty-block" class="wizard-subblock" data-wizard-sub="3">
+              <h2>4. Modo de Juego y Dificultad</h2>
+              <div class="sub-section">
+                <label class="section-label">Modo y Sincronización</label>
+                <div id="sync-mode-options" class="pill-row">
+                  <button class="pill active" data-sync="pve">PvE vs IA</button>
+                  <button class="pill" data-sync="pvp_adhoc">PvP Ad-Hoc (Sala)</button>
+                  <button class="pill" data-sync="pvp_legacy">PvP Legacy (Módem 90s)</button>
+                </div>
+              </div>
+
+              <div id="pve-config-box" class="sub-section">
+                <label class="section-label">Dificultad de la IA</label>
+                <div id="difficulty-options" class="pill-row"></div>
+              </div>
+
+              <div id="adhoc-config-box" class="mp-box hidden">
+                <div class="mp-subtabs">
+                  <button id="adhoc-tab-host" class="pill active">Host (Crear Sala)</button>
+                  <button id="adhoc-tab-guest" class="pill">Invitado (Unirse)</button>
+                </div>
+                <div id="adhoc-host-pane">
+                  <div class="mp-hint">Dirección Host: <code id="adhoc-host-addr">detectando...</code></div>
+                  <div class="mp-actions-row">
+                    <button id="adhoc-create-btn" class="btn-accent">Crear Sala Ad-Hoc</button>
+                    <button id="adhoc-cancel-btn" class="btn-ghost hidden">Cancelar Sala</button>
+                  </div>
+                  <div id="adhoc-room-wait" class="mp-status-card hidden">
+                    <span>Sala lista • Código: <strong id="adhoc-room-code">----</strong></span>
+                    <button id="adhoc-copy-btn" class="btn-ghost btn-mini">Copiar IP+Código</button>
+                    <small>Esperando al jugador invitado...</small>
+                  </div>
+                </div>
+                <div id="adhoc-guest-pane" class="hidden">
+                  <div class="mp-field-row">
+                    <input id="adhoc-join-addr" class="mp-input" type="text" placeholder="IP:Puerto del Host (ej: 192.168.1.20:3000)" />
+                    <input id="adhoc-join-code" class="mp-input code-input" type="text" maxlength="6" placeholder="CÓDIGO" />
+                  </div>
+                  <button id="adhoc-join-btn" class="btn-primary btn-full">Sincronizar y Unirse</button>
+                  <div id="adhoc-guest-status" class="mp-hint">Introduce la IP y código que ve el Host.</div>
+                </div>
+              </div>
+
+              <div id="legacy-config-box" class="mp-box modem-box hidden">
+                <div class="modem-header">
+                  <span class="modem-brand">HAYES 56K • V.90 AUDIO SYNC</span>
+                  <div class="modem-leds">
+                    <span class="led on" id="led-pwr">PWR</span>
+                    <span class="led" id="led-hs">HS</span>
+                    <span class="led" id="led-cd">CD</span>
+                    <span class="led" id="led-tx">TX</span>
+                    <span class="led" id="led-rx">RX</span>
+                  </div>
+                </div>
+                <div class="mp-subtabs">
+                  <button id="legacy-chan-acoustic" class="pill active">Altavoz + Micrófono</button>
+                  <button id="legacy-chan-loopback" class="pill">Mismo PC (con sonido módem)</button>
+                </div>
+                <div class="modem-meter-wrap">
+                  <div id="legacy-signal-bar" class="modem-meter-fill"></div>
+                </div>
+                <div id="legacy-status-text" class="modem-lcd">ATZ OK — Selecciona Host o Invitado para marcar línea...</div>
+                <div class="mp-actions-row">
+                  <button id="legacy-host-btn" class="btn-accent">📞 Host (Marcar Línea)</button>
+                  <button id="legacy-guest-btn" class="btn-tool">📡 Invitado (Escuchar)</button>
+                  <button id="legacy-resend-btn" class="btn-ghost btn-mini hidden">🔊 Reenviar Tono</button>
+                </div>
               </div>
             </div>
+
+            <div id="step-map-block" class="wizard-subblock" data-wizard-sub="4">
+              <h2 class="mobile-only-block">Elige el Mapa</h2>
+              <div class="sub-section">
+                <label class="section-label">Mapa</label>
+                <div id="map-options" class="pill-row">
+                  <button class="pill active" data-map="bunkers" data-desc="Coberturas simétricas de ladrillo y pasillos tácticos.">Búnkeres</button>
+                  <button class="pill" data-map="labyrinth" data-desc="Rutas estrechas con muros destructibles y flanqueos.">Laberinto</button>
+                  <button class="pill" data-map="open" data-desc="Campo despejado con poca cobertura para duelos directos.">Campo Abierto</button>
+                  <button class="pill" data-map="random" data-desc="Generación aleatoria con conectividad garantizada.">🎲 Aleatorio</button>
+                </div>
+              </div>
+              <div id="mobile-summary-card" class="mobile-summary-card mobile-only-block"></div>
+            </div>
+
             <div class="controls-preview">
               <strong>Controles en portátil:</strong>
               <ul>
@@ -69,6 +174,9 @@
         <footer class="hangar-footer">
           <div id="ws-status" class="ws-status">Conectando con el servidor...</div>
           <div class="footer-actions">
+            <button id="hangar-prev-btn" type="button" class="btn-ghost wizard-nav-btn hidden">← Volver</button>
+            <button id="hangar-next-btn" type="button" class="btn-tool wizard-nav-btn hidden">Siguiente →</button>
+            <button id="settings-hangar-btn" type="button" class="btn-ghost" title="Ajustes de controles y sensibilidad">⚙️ Ajustes</button>
             <button id="shutdown-hangar-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
             <button id="start-match-btn" class="btn-primary" disabled>Iniciar Batalla</button>
           </div>
@@ -100,13 +208,19 @@
 
         <div class="hud-group actions-group">
           <button id="toggle-control-btn" class="btn-tool hidden" title="Alternar control entre Tanque y Dron">[TAB] Tanque</button>
-          <button id="mode-shoot-btn" class="btn-tool active" title="Clic izquierdo dispara">[F] Disparar</button>
-          <button id="mode-move-btn" class="btn-tool" title="Clic izquierdo mueve con ruta A*">[M] Mover</button>
+          <div class="mode-switch-group">
+            <button id="mode-move-btn" class="btn-tool" title="Modo Movimiento: clic para mover por ruta A*">[M] Movimiento</button>
+            <button id="mode-shoot-btn" class="btn-tool active" title="Modo Lucha: elige proyectil y apunta">[F] Lucha</button>
+          </div>
           <span class="divider"></span>
-          <button id="weapon-normal-btn" class="btn-weapon active">[1] Estándar</button>
-          <button id="weapon-special-btn" class="btn-weapon">[2] Especial 1</button>
-          <button id="weapon-special2-btn" class="btn-weapon">[3] Especial 2</button>
+          <div id="combat-weapons-group" class="combat-weapons-group">
+            <button id="weapon-normal-btn" class="btn-weapon active">[1] Estándar</button>
+            <button id="weapon-special-btn" class="btn-weapon">[2] Especial 1</button>
+            <button id="weapon-special2-btn" class="btn-weapon">[3] Especial 2</button>
+          </div>
           <span class="divider"></span>
+          <button id="mobile-info-btn" type="button" class="btn-tool mobile-only">📋 Táctica</button>
+          <button id="settings-battle-btn" type="button" class="btn-ghost" title="Ajustes de controles y sensibilidad">⚙️</button>
           <button id="end-turn-btn" class="btn-accent">Terminar Turno [Espacio]</button>
           <button id="back-hangar-btn" class="btn-ghost">Hangar</button>
           <button id="shutdown-battle-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
@@ -114,6 +228,29 @@
       </header>
 
       <main class="battle-main">
+        <!-- CONTROLES IZQUIERDOS MÓVIL (JOYSTICK O CRUCETA DE MOVIMIENTO) -->
+        <div id="mobile-left-controls" class="mobile-side-controls mobile-left-controls" aria-label="Control de movimiento">
+          <div class="joystick-wrap">
+            <div id="joy-move" class="joystick-base joystick-move" role="application" aria-label="Mover tanque">
+              <span class="joy-dir joy-dir-up">▲</span>
+              <span class="joy-dir joy-dir-down">▼</span>
+              <span class="joy-dir joy-dir-left">◀</span>
+              <span class="joy-dir joy-dir-right">▶</span>
+              <div class="joystick-thumb"></div>
+            </div>
+            <div id="mobile-dpad" class="mobile-dpad" aria-label="Cruceta de movimiento">
+              <button type="button" class="dpad-btn dpad-up" data-dx="0" data-dy="-1" aria-label="Arriba">▲</button>
+              <div class="dpad-mid">
+                <button type="button" class="dpad-btn dpad-left" data-dx="-1" data-dy="0" aria-label="Izquierda">◀</button>
+                <button type="button" class="dpad-btn dpad-center" disabled aria-hidden="true">•</button>
+                <button type="button" class="dpad-btn dpad-right" data-dx="1" data-dy="0" aria-label="Derecha">▶</button>
+              </div>
+              <button type="button" class="dpad-btn dpad-down" data-dx="0" data-dy="1" aria-label="Abajo">▼</button>
+            </div>
+            <span class="joystick-label">MOVER</span>
+          </div>
+        </div>
+
         <div class="canvas-wrapper">
           <canvas id="game-canvas" width="960" height="576"></canvas>
           <div id="toast-banner" class="toast hidden"></div>
@@ -131,9 +268,44 @@
           </div>
         </div>
 
-        <aside class="sidebar">
+        <!-- CONTROLES DERECHOS MÓVIL (ARMAS + DISPARAR + JOYSTICK APUNTADO) -->
+        <div id="mobile-right-controls" class="mobile-side-controls mobile-right-controls" aria-label="Controles de combate">
+          <div class="mobile-weapons-stack">
+            <button id="m-weapon-normal-btn" type="button" class="btn-weapon active">[1]</button>
+            <button id="m-weapon-special-btn" type="button" class="btn-weapon">[2]</button>
+            <button id="m-weapon-special2-btn" type="button" class="btn-weapon">[3]</button>
+          </div>
+          <button id="mobile-fire-btn" type="button" class="btn-fire btn-fire-big" title="Disparar hacia donde estás apuntando">🎯 DISPARAR</button>
+          <div class="joystick-wrap">
+            <div id="joy-aim" class="joystick-base joystick-aim" role="application" aria-label="Apuntar 360 grados">
+              <span class="joy-crosshair"></span>
+              <div class="joystick-thumb"></div>
+            </div>
+            <span class="joystick-label">APUNTAR</span>
+          </div>
+        </div>
+
+        <aside id="battle-sidebar" class="sidebar">
+          <div class="mobile-sidebar-head mobile-only-block">
+            <span>Panel Táctico</span>
+            <button id="mobile-sidebar-close" type="button" class="btn-ghost btn-mini">✕ Cerrar</button>
+          </div>
+          <div id="legacy-battle-box" class="side-panel modem-box hidden">
+            <div class="modem-header">
+              <span class="modem-brand">MÓDEM 90s</span>
+              <div class="modem-leds">
+                <span class="led on">PWR</span>
+                <span class="led" id="battle-led-cd">CD</span>
+                <span class="led" id="battle-led-tx">TX</span>
+                <span class="led" id="battle-led-rx">RX</span>
+              </div>
+            </div>
+            <div id="battle-modem-status" class="modem-lcd">Enlace FSK 1200/2200 Hz activo</div>
+            <button id="battle-legacy-resend-btn" class="btn-ghost btn-mini" style="width:100%;margin-top:6px;">🔊 Reenviar último paquete</button>
+          </div>
+
           <div class="side-panel">
-            <h3>Tanques Enemigos</h3>
+            <h3 id="enemy-panel-title">Tanques Enemigos</h3>
             <div id="enemy-list" class="enemy-list"></div>
           </div>
 
@@ -151,6 +323,49 @@
         </aside>
       </main>
     </section>
+    <!-- MODAL DE AJUSTES -->
+    <div id="settings-overlay" class="overlay settings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="overlay-card settings-card">
+        <div class="settings-header">
+          <h2 id="settings-title">⚙️ Ajustes de Controles</h2>
+          <button id="settings-close-btn" type="button" class="btn-ghost btn-mini" aria-label="Cerrar ajustes">✕</button>
+        </div>
+
+        <div class="settings-section">
+          <label class="section-label">Tipo de control de movimiento (lado izquierdo)</label>
+          <div id="settings-control-options" class="settings-choice-grid">
+            <button type="button" class="option-card settings-choice active" data-control-type="joystick">
+              <div class="option-title"><span>🕹️ Joystick Analógico</span></div>
+              <div class="option-desc">Desliza el pulgar libremente en 360° (incluye diagonales).</div>
+            </button>
+            <button type="button" class="option-card settings-choice" data-control-type="dpad">
+              <div class="option-title"><span>✚ Cruceta (D-Pad)</span></div>
+              <div class="option-desc">4 botones direccionales clásicos (arriba, abajo, izq., der.).</div>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-slider-head">
+            <label for="settings-sensitivity" class="section-label">Sensibilidad del control</label>
+            <span id="settings-sensitivity-val" class="sensitivity-badge">100% (Normal)</span>
+          </div>
+          <input id="settings-sensitivity" class="settings-range" type="range" min="50" max="200" step="5" value="100" />
+          <div id="settings-sensitivity-presets" class="pill-row settings-presets">
+            <button type="button" class="pill" data-sens="70">Suave (70%)</button>
+            <button type="button" class="pill active" data-sens="100">Normal (100%)</button>
+            <button type="button" class="pill" data-sens="145">Rápida (145%)</button>
+            <button type="button" class="pill" data-sens="190">Máxima (190%)</button>
+          </div>
+          <p class="settings-hint">Ajusta la zona muerta, la velocidad de desplazamiento y la respuesta de apuntado.</p>
+        </div>
+
+        <div class="overlay-actions settings-footer">
+          <button id="settings-reset-btn" type="button" class="btn-ghost">Restablecer</button>
+          <button id="settings-done-btn" type="button" class="btn-primary">Listo</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/js/main.js"></script>

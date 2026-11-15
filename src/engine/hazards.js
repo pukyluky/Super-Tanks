@@ -1,11 +1,11 @@
 const { TANK_SIZE } = require('../config/constants');
 const { TURRET_CATALOG } = require('../data/specials1');
 const { SPECIAL2_CATALOG } = require('../data/specials2');
-const { applyRadialWallDamage, applyRadialTankDamage } = require('./physics');
+const { applyTankDamage, applyRadialWallDamage, applyRadialTankDamage } = require('./physics');
 
-function serializeHazardsForPlayer(game) {
+function serializeHazardsForPlayer(game, viewerTeam = 'player') {
   return game.hazards
-    .filter((h) => !(h.kind === 'trap' && h.team === 'ai'))
+    .filter((h) => !(h.kind === 'trap' && h.team !== viewerTeam))
     .map((h) => ({
       id: h.id,
       kind: h.kind,
@@ -101,12 +101,11 @@ function processMovementWithHazards(game, tank, steps) {
 
       if (hz.kind === 'trap' && hz.team !== tank.team && (hz.armingTurns || 0) <= 0) {
         game.hazards.splice(hi, 1);
-        tank.hp = Math.max(0, tank.hp - hz.damage);
-        if (tank.hp === 0) tank.alive = false;
+        const dmg = applyTankDamage(tank, hz.damage);
         tank.slowedTurns = Math.max(tank.slowedTurns, 1);
         tank.moveAp = Math.floor(tank.moveAp * (1 - hz.slowPercent));
         maxStepsAllowed = Math.min(maxStepsAllowed, i + 1 + tank.moveAp);
-        game.logs.unshift(`¡Trampa Invisible activada por ${tank.name}! -${hz.damage} PV y -35% movimiento.`);
+        game.logs.unshift(`¡Trampa Invisible activada por ${tank.name}! -${dmg} PV y -35% movimiento.`);
         hazardEvents.push({
           kind: 'trap',
           x: hz.x,
@@ -117,7 +116,7 @@ function processMovementWithHazards(game, tank, steps) {
             {
               tankId: tank.id,
               tankName: tank.name,
-              damage: hz.damage,
+              damage: dmg,
               remainingHp: tank.hp,
               destroyed: !tank.alive,
               x: tank.x + TANK_SIZE / 2,
@@ -132,9 +131,8 @@ function processMovementWithHazards(game, tank, steps) {
         ((hz.kind === 'poison' || hz.kind === 'fire_pool' || hz.kind === 'fire_wall') && hz.team !== tank.team);
       if (isZoneDot && !hz.hitThisTurn.includes(tank.id)) {
         hz.hitThisTurn.push(tank.id);
-        const zoneDmg = hz.kind === 'molotov' ? SPECIAL2_CATALOG.molotov.burnDamage : hz.damage;
-        tank.hp = Math.max(0, tank.hp - zoneDmg);
-        if (tank.hp === 0) tank.alive = false;
+        const rawZoneDmg = hz.kind === 'molotov' ? SPECIAL2_CATALOG.molotov.burnDamage : hz.damage;
+        const zoneDmg = applyTankDamage(tank, rawZoneDmg);
         const zoneLabel = hz.kind === 'poison'
           ? 'un charco tóxico'
           : hz.kind === 'fire_pool'
@@ -183,9 +181,8 @@ function tickMolotovZones(game, sendMessage) {
       if (!tank.alive) continue;
       if (hz.kind !== 'molotov' && tank.team === hz.team) continue;
       if (isTankTouchingHazard(tank, hz)) {
-        const dmg = hz.kind === 'molotov' ? SPECIAL2_CATALOG.molotov.burnDamage : hz.damage;
-        tank.hp = Math.max(0, tank.hp - dmg);
-        if (tank.hp === 0) tank.alive = false;
+        const rawDmg = hz.kind === 'molotov' ? SPECIAL2_CATALOG.molotov.burnDamage : hz.damage;
+        const dmg = applyTankDamage(tank, rawDmg);
         hz.hitThisTurn.push(tank.id);
         hitKind = hz.kind;
         zoneHits.push({
@@ -234,9 +231,7 @@ function tickMolotovZones(game, sendMessage) {
 
 function applySingleDoT(game, tank, sendMessage, turnsKey, dmgKey, defaultDmg, fxKind, label) {
   if (!tank || !tank.alive || (tank[turnsKey] || 0) <= 0) return;
-  const dmg = tank[dmgKey] || defaultDmg;
-  tank.hp = Math.max(0, tank.hp - dmg);
-  if (tank.hp === 0) tank.alive = false;
+  const dmg = applyTankDamage(tank, tank[dmgKey] || defaultDmg);
   tank[turnsKey] -= 1;
   if (tank[turnsKey] <= 0) {
     tank[turnsKey] = 0;

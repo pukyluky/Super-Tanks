@@ -5,7 +5,14 @@ const { SPECIAL2_CATALOG } = require('../data/specials2');
 const { TANK_TYPES_CATALOG, DIFFICULTY_CONFIG } = require('../data/tanks');
 const { generateArena } = require('./mapGenerator');
 const { buildWalkableGrid, findPathAStar } = require('./pathfinding');
-const { raycastWallDDA, findClosestTankHit, hasLineOfSightToTank } = require('./physics');
+const {
+  applyTankDamage,
+  raycastWallDDA,
+  findClosestTankHit,
+  hasLineOfSightToEntity,
+  hasLineOfSightToTank,
+  isTankExposedToObserverAt
+} = require('./physics');
 const { resolveShot } = require('./combat');
 const {
   serializeHazardsForPlayer,
@@ -43,6 +50,7 @@ function createTankEntity({
     tankTypeName: tankType.name,
     armorId: armor.id,
     armorName: armor.name,
+    passive: tankType.passive || null,
     basicWeapon: tankType.basicWeapon || 'standard',
     turretId: turret.id,
     special2Id: tankType.special2Id,
@@ -57,6 +65,8 @@ function createTankEntity({
     canShoot: true,
     specialCooldown: 0,
     special2Cooldown: 0,
+    rageActive: false,
+    rageDamageReduction: 0,
     chargedReady: false,
     trapBurstRemaining: 0,
     slowedTurns: 0,
@@ -75,6 +85,88 @@ function createTankEntity({
   };
 }
 
+function getGameActiveTeam(game) {
+  if (!game) return 'player';
+  return game.isPvp ? (game.activeTeam || 'player1') : (game.phase === 'ai' ? 'ai' : 'player');
+}
+
+function getControlledTank(game) {
+  if (!game) return null;
+  const targetId = game.isPvp ? (game.activeTeam || 'player1') : 'player';
+  return game.tanks.find((t) => t.id === targetId) || null;
+}
+
+function resolveTankSelection(tankTypeId, armorId) {
+  const armor = ARMOR_CATALOG[armorId] || ARMOR_CATALOG.medium;
+  const tankType = TANK_TYPES_CATALOG[tankTypeId] || TANK_TYPES_CATALOG.artillery;
+  const turret = TURRET_CATALOG[tankType.turretId];
+  return { tankType, armor, turret };
+}
+
+function createPvpMatch(config) {
+  const mapStyle = config.mapStyle || 'bunkers';
+  const mapSeed = Number.isFinite(Number(config.mapSeed)) && Number(config.mapSeed) > 0
+    ? (Number(config.mapSeed) >>> 0)
+    : ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+  const grid = generateArena(mapStyle, mapSeed);
+  const p1 = resolveTankSelection(config.p1TankTypeId, config.p1ArmorId);
+  const p2 = resolveTankSelection(config.p2TankTypeId, config.p2ArmorId);
+  const sameColor = p1.tankType.color === p2.tankType.color;
+
+  const p1Tank = createTankEntity({
+    id: 'player1',
+    name: config.p1Name || `J1 (${p1.tankType.name})`,
+    team: 'player1',
+    tankType: p1.tankType,
+    armor: p1.armor,
+    turret: p1.turret,
+    x: 8,
+    y: 34,
+    dir: 0,
+    hp: p1.armor.maxHp,
+    moveAp: p1.armor.moveAp,
+    color: p1.tankType.color,
+    accent: p1.tankType.accent
+  });
+
+  const p2Tank = createTankEntity({
+    id: 'player2',
+    name: config.p2Name || `J2 (${p2.tankType.name})`,
+    team: 'player2',
+    tankType: p2.tankType,
+    armor: p2.armor,
+    turret: p2.turret,
+    x: 108,
+    y: 34,
+    dir: Math.PI,
+    hp: p2.armor.maxHp,
+    moveAp: p2.armor.moveAp,
+    color: sameColor ? '#fb7185' : p2.tankType.color,
+    accent: sameColor ? '#9f1239' : p2.tankType.accent
+  });
+
+  return {
+    mode: config.mode || 'pvp_adhoc',
+    isPvp: true,
+    difficulty: 'pvp',
+    mapStyle,
+    turnNumber: 1,
+    phase: 'player',
+    activeTeam: 'player1',
+    activeControl: 'player1',
+    winner: null,
+    endingTurn: false,
+    nextEntityId: 1,
+    grid,
+    tanks: [p1Tank, p2Tank],
+    hazards: [],
+    deployables: [],
+    logs: [
+      `Duelo PvP iniciado (${mapStyle}): ${p1Tank.name} vs ${p2Tank.name}. Turno de J1.`
+    ]
+  };
+}
+
 function createMatch(config) {
   const diff = DIFFICULTY_CONFIG[config.difficulty] || DIFFICULTY_CONFIG.normal;
   const armor = ARMOR_CATALOG[config.armorId || config.chassisId] || ARMOR_CATALOG.medium;
@@ -82,7 +174,10 @@ function createMatch(config) {
     Object.values(TANK_TYPES_CATALOG).find((t) => t.turretId === config.turretId) ||
     TANK_TYPES_CATALOG.artillery;
   const turret = TURRET_CATALOG[tankType.turretId];
-  const grid = generateArena(config.mapStyle || 'bunkers');
+  const mapSeed = Number.isFinite(Number(config.mapSeed)) && Number(config.mapSeed) > 0
+    ? (Number(config.mapSeed) >>> 0)
+    : ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+  const grid = generateArena(config.mapStyle || 'bunkers', mapSeed);
 
   const playerTank = createTankEntity({
     id: 'player',
@@ -142,10 +237,13 @@ function createMatch(config) {
   }
 
   return {
+    mode: 'pve',
+    isPvp: false,
     difficulty: diff.id,
     mapStyle: config.mapStyle || 'bunkers',
     turnNumber: 1,
     phase: 'player',
+    activeTeam: 'player',
     activeControl: 'player',
     winner: null,
     endingTurn: false,
@@ -161,6 +259,32 @@ function createMatch(config) {
 }
 
 function checkGameOver(game) {
+  if (game.isPvp) {
+    const p1 = game.tanks.find((t) => t.id === 'player1');
+    const p2 = game.tanks.find((t) => t.id === 'player2');
+    const p1Alive = Boolean(p1 && p1.alive);
+    const p2Alive = Boolean(p2 && p2.alive);
+    if (!p1Alive && !p2Alive) {
+      game.phase = 'gameover';
+      game.winner = 'draw';
+      game.logs.unshift(`¡Doble destrucción en ${game.turnNumber} turnos! Empate.`);
+      return true;
+    }
+    if (!p1Alive) {
+      game.phase = 'gameover';
+      game.winner = 'player2';
+      game.logs.unshift(`¡${p2.name} gana el duelo en ${game.turnNumber} turnos!`);
+      return true;
+    }
+    if (!p2Alive) {
+      game.phase = 'gameover';
+      game.winner = 'player1';
+      game.logs.unshift(`¡${p1.name} gana el duelo en ${game.turnNumber} turnos!`);
+      return true;
+    }
+    return false;
+  }
+
   const player = game.tanks.find((t) => t.id === 'player');
   const aliveAi = game.tanks.filter((t) => t.team === 'ai' && t.alive);
   if (!player || !player.alive) {
@@ -182,9 +306,11 @@ function serializeGrid(grid) {
   return grid.map((row) => Array.from(row));
 }
 
-function serializeState(game) {
+function serializeState(game, viewerTeam = 'player') {
   return {
     type: 'state',
+    mode: game.mode || 'pve',
+    isPvp: Boolean(game.isPvp),
     gridW: GRID_W,
     gridH: GRID_H,
     tankSize: TANK_SIZE,
@@ -192,11 +318,13 @@ function serializeState(game) {
     mapStyle: game.mapStyle,
     turnNumber: game.turnNumber,
     phase: game.phase,
+    activeTeam: game.activeTeam || 'player',
     activeControl: game.activeControl || 'player',
+    myTeam: viewerTeam,
     winner: game.winner,
     grid: serializeGrid(game.grid),
     tanks: game.tanks,
-    hazards: serializeHazardsForPlayer(game),
+    hazards: serializeHazardsForPlayer(game, viewerTeam),
     deployables: game.deployables.filter((d) => d.hp > 0),
     logs: game.logs.slice(0, 12)
   };
@@ -232,10 +360,9 @@ async function runDeployableTurrets(game, team, sendMessage, isActive) {
     if (bestTarget) {
       tur.aimAngle = bestTarget.angle;
       const target = bestTarget.enemy;
-      target.hp = Math.max(0, target.hp - tur.damage);
-      if (target.hp === 0) target.alive = false;
+      const dmg = applyTankDamage(target, tur.damage);
 
-      game.logs.unshift(`${tur.name} dispara a ${target.name} (-${tur.damage} PV${!target.alive ? ' ¡DESTRUIDO!' : ''})`);
+      game.logs.unshift(`${tur.name} dispara a ${target.name} (-${dmg} PV${!target.alive ? ' ¡DESTRUIDO!' : ''})`);
       sendMessage({
         type: 'shot_resolved',
         events: {
@@ -250,7 +377,7 @@ async function runDeployableTurrets(game, team, sendMessage, isActive) {
             {
               tankId: target.id,
               tankName: target.name,
-              damage: tur.damage,
+              damage: dmg,
               remainingHp: target.hp,
               destroyed: !target.alive,
               x: bestTarget.hitX,
@@ -324,6 +451,121 @@ async function beginAITurn(game, sendMessage, isActive) {
   await runAITurn(game, sendMessage, isActive);
 }
 
+/** Collects all grid coordinates reachable within maxSteps on walkable using BFS. */
+function collectReachableCells(walkable, startX, startY, maxSteps) {
+  const height = walkable.length;
+  const width = height > 0 ? walkable[0].length : 0;
+  const nodes = [{ x: startX, y: startY, steps: 0, parentIdx: -1 }];
+  if (maxSteps <= 0 || height === 0 || width === 0) return nodes;
+
+  const visited = new Set([`${startX},${startY}`]);
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1]
+  ];
+
+  let head = 0;
+  while (head < nodes.length) {
+    const cur = nodes[head];
+    if (cur.steps < maxSteps) {
+      for (const [dx, dy] of dirs) {
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (!walkable[ny]?.[nx]) continue;
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        nodes.push({ x: nx, y: ny, steps: cur.steps + 1, parentIdx: head });
+      }
+    }
+    head++;
+  }
+  return nodes;
+}
+
+/** Reconstructs step sequence from BFS node index back to root (excluding start). */
+function reconstructBfsPath(nodes, targetIdx) {
+  const path = [];
+  let idx = targetIdx;
+  while (idx > 0) {
+    const n = nodes[idx];
+    path.push({ x: n.x, y: n.y });
+    idx = n.parentIdx;
+  }
+  path.reverse();
+  return path;
+}
+
+/** Selects the closest visible deployable, breaking near ties in favor of drones. */
+function pickPreferredVisibleDeployable(ai, visibleDeps) {
+  const ox = ai.x + TANK_SIZE / 2;
+  const oy = ai.y + TANK_SIZE / 2;
+  let best = visibleDeps[0];
+  let bestScore = Infinity;
+  for (const dep of visibleDeps) {
+    const size = dep.size || TANK_SIZE;
+    const dist = Math.hypot(dep.x + size / 2 - ox, dep.y + size / 2 - oy);
+    const kindBonus = dep.kind === 'drone' ? -2 : 0;
+    const score = dist + kindBonus;
+    if (score < bestScore) {
+      bestScore = score;
+      best = dep;
+    }
+  }
+  return best;
+}
+
+/** Picks movement steps while staying outside active enemy drones' line of sight when possible. */
+function chooseAIMovementSteps(game, ai, walkable, maxSteps, bestPath, player, activeEnemyDeps, activeEnemyDrones) {
+  if (activeEnemyDrones.length === 0) {
+    return bestPath && bestPath.length > 0 ? bestPath.slice(0, maxSteps) : [];
+  }
+
+  const nodes = collectReachableCells(walkable, ai.x, ai.y, maxSteps);
+  const goalAnchor =
+    bestPath && bestPath.length > 0
+      ? bestPath[Math.min(bestPath.length - 1, Math.max(0, maxSteps - 1))]
+      : { x: player.x, y: player.y };
+
+  let bestIdx = 0;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const exposedToDrone = activeEnemyDrones.some((dr) =>
+      isTankExposedToObserverAt(game.grid, game.tanks, dr, ai.id, node.x, node.y, activeEnemyDeps)
+    );
+
+    const aiProxy = { ...ai, x: node.x, y: node.y };
+    const tanksAtPos = game.tanks.map((t) => (t.id === ai.id ? aiProxy : t));
+    const canSeePlayer = hasLineOfSightToEntity(game.grid, tanksAtPos, aiProxy, player, activeEnemyDeps);
+    const canSeeDep = activeEnemyDeps.some((d) =>
+      hasLineOfSightToEntity(game.grid, tanksAtPos, aiProxy, d, activeEnemyDeps)
+    );
+
+    const distAnchor = Math.hypot(node.x - goalAnchor.x, node.y - goalAnchor.y);
+    const distPlayer = Math.hypot(node.x - player.x, node.y - player.y);
+
+    const score =
+      (!exposedToDrone ? 100000 : 0) +
+      (canSeePlayer ? 25000 : 0) +
+      (canSeeDep ? 4000 : 0) -
+      distAnchor * 30 -
+      distPlayer * 2 -
+      node.steps * 0.5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+
+  return reconstructBfsPath(nodes, bestIdx);
+}
+
 async function runAITurn(game, sendMessage, isActive) {
   const diff = DIFFICULTY_CONFIG[game.difficulty] || DIFFICULTY_CONFIG.normal;
   const player = game.tanks.find((t) => t.id === 'player');
@@ -333,6 +575,8 @@ async function runAITurn(game, sendMessage, isActive) {
   for (const ai of aiTanks) {
     if (!isActive() || game.phase === 'gameover') return;
 
+    ai.rageActive = false;
+    ai.rageDamageReduction = 0;
     applyTurnStartPoison(game, ai, sendMessage);
     if (checkGameOver(game)) {
       sendMessage(serializeState(game));
@@ -377,50 +621,74 @@ async function runAITurn(game, sendMessage, isActive) {
     if (ai.empSlowTurns > 0) ai.empSlowTurns--;
     ai.canShoot = true;
 
-    const walkable = buildWalkableGrid(game.grid, game.tanks, ai.id);
-    const candidates = [
-      { x: player.x, y: player.y },
-      { x: Math.max(2, player.x - 16), y: player.y },
-      { x: Math.min(GRID_W - 6, player.x + 16), y: player.y },
-      { x: player.x, y: Math.max(2, player.y - 14) },
-      { x: player.x, y: Math.min(GRID_H - 6, player.y + 14) }
-    ];
+    const activeEnemyDeps = (game.deployables || []).filter(
+      (d) => d.hp > 0 && d.team !== ai.team
+    );
+    const activeEnemyDrones = activeEnemyDeps.filter((d) => d.kind === 'drone');
 
-    let bestPath = null;
-    for (const c of candidates) {
-      if (!walkable[c.y]?.[c.x]) continue;
-      const p = findPathAStar(walkable, ai.x, ai.y, c.x, c.y, 4500);
-      if (p && (!bestPath || p.length < bestPath.length)) {
-        bestPath = p;
-      }
-    }
+    const hasTankLOSStart = hasLineOfSightToEntity(
+      game.grid,
+      game.tanks,
+      ai,
+      player,
+      activeEnemyDeps
+    );
+    const visibleDepsStart = activeEnemyDeps.filter((d) =>
+      hasLineOfSightToEntity(game.grid, game.tanks, ai, d, activeEnemyDeps)
+    );
+    const hasTargetInSightStart = hasTankLOSStart || visibleDepsStart.length > 0;
 
-    if (!bestPath) {
-      let bestDist = 1e9;
-      let fallbackTarget = null;
-      for (let y = 4; y < GRID_H - 6; y += 4) {
-        for (let x = 4; x < GRID_W - 6; x += 4) {
-          if (!walkable[y][x]) continue;
-          const d = Math.hypot(x - player.x, y - player.y);
-          if (d < bestDist) {
-            bestDist = d;
-            fallbackTarget = { x, y };
-          }
+    if (!hasTargetInSightStart) {
+      const walkable = buildWalkableGrid(game.grid, game.tanks, ai.id);
+      const candidates = [
+        { x: player.x, y: player.y },
+        { x: Math.max(2, player.x - 16), y: player.y },
+        { x: Math.min(GRID_W - 6, player.x + 16), y: player.y },
+        { x: player.x, y: Math.max(2, player.y - 14) },
+        { x: player.x, y: Math.min(GRID_H - 6, player.y + 14) }
+      ];
+
+      let bestPath = null;
+      for (const c of candidates) {
+        if (!walkable[c.y]?.[c.x]) continue;
+        const p = findPathAStar(walkable, ai.x, ai.y, c.x, c.y, 4500);
+        if (p && (!bestPath || p.length < bestPath.length)) {
+          bestPath = p;
         }
       }
-      if (fallbackTarget) {
-        bestPath = findPathAStar(walkable, ai.x, ai.y, fallbackTarget.x, fallbackTarget.y, 4000);
+
+      if (!bestPath) {
+        let bestDist = 1e9;
+        let fallbackTarget = null;
+        for (let y = 4; y < GRID_H - 6; y += 4) {
+          for (let x = 4; x < GRID_W - 6; x += 4) {
+            if (!walkable[y][x]) continue;
+            const d = Math.hypot(x - player.x, y - player.y);
+            if (d < bestDist) {
+              bestDist = d;
+              fallbackTarget = { x, y };
+            }
+          }
+        }
+        if (fallbackTarget) {
+          bestPath = findPathAStar(walkable, ai.x, ai.y, fallbackTarget.x, fallbackTarget.y, 4000);
+        }
       }
-    }
 
-    const distToPlayer = Math.hypot(player.x - ai.x, player.y - ai.y);
-    const hasLOS = hasLineOfSightToTank(game.grid, game.tanks, ai, player);
-
-    if (bestPath && bestPath.length > 0 && !(hasLOS && distToPlayer < 26 && game.difficulty !== 'easy')) {
       const maxSteps = game.difficulty === 'easy'
         ? Math.max(4, Math.floor(ai.moveAp * 0.65))
         : ai.moveAp;
-      const plannedSteps = bestPath.slice(0, maxSteps);
+      const plannedSteps = chooseAIMovementSteps(
+        game,
+        ai,
+        walkable,
+        maxSteps,
+        bestPath,
+        player,
+        activeEnemyDeps,
+        activeEnemyDrones
+      );
+
       if (plannedSteps.length > 0) {
         const { takenSteps, hazardEvents } = processMovementWithHazards(game, ai, plannedSteps);
 
@@ -460,23 +728,47 @@ async function runAITurn(game, sendMessage, isActive) {
     if (!isActive() || game.phase === 'gameover') return;
     if (!ai.alive) continue;
 
+    const enemyDepsNow = (game.deployables || []).filter(
+      (d) => d.hp > 0 && d.team !== ai.team
+    );
+    const losPlayerNow = hasLineOfSightToEntity(
+      game.grid,
+      game.tanks,
+      ai,
+      player,
+      enemyDepsNow
+    );
+    const visibleDepsNow = enemyDepsNow.filter((d) =>
+      hasLineOfSightToEntity(game.grid, game.tanks, ai, d, enemyDepsNow)
+    );
+
+    let targetEntity = player;
+    let losNow = losPlayerNow;
+    if (!losPlayerNow && visibleDepsNow.length > 0) {
+      targetEntity = pickPreferredVisibleDeployable(ai, visibleDepsNow);
+      losNow = true;
+    }
+
     const ox = ai.x + TANK_SIZE / 2;
     const oy = ai.y + TANK_SIZE / 2;
-    const px = player.x + TANK_SIZE / 2;
-    const py = player.y + TANK_SIZE / 2;
+    const targetSize = targetEntity.size || TANK_SIZE;
+    const px = targetEntity.x + targetSize / 2;
+    const py = targetEntity.y + targetSize / 2;
     const directAngle = Math.atan2(py - oy, px - ox);
     const distNow = Math.hypot(px - ox, py - oy);
-    const losNow = hasLineOfSightToTank(game.grid, game.tanks, ai, player);
 
     let chosenMode = 'normal';
-    const canSpecial1 = !aiSuppressed && ai.specialCooldown === 0;
-    const canSpecial2 = !aiSuppressed && (ai.special2Cooldown === 0 || ai.chargedReady);
-    if (!aiSuppressed && ai.chargedReady) {
+    const targetingDeployable = targetEntity !== player;
+    const canSpecial1 = !targetingDeployable && !aiSuppressed && ai.specialCooldown === 0;
+    const canSpecial2 = !targetingDeployable && !aiSuppressed && (ai.special2Cooldown === 0 || ai.chargedReady);
+    if (!targetingDeployable && !aiSuppressed && ai.chargedReady) {
       chosenMode = 'special2';
     } else if (canSpecial1 && Math.random() < diff.useSpecialChance) {
       if (ai.turretId === 'mortar' && distNow <= TURRET_CATALOG.mortar.range) {
         chosenMode = 'special';
       } else if (ai.turretId === 'shotgun' && distNow <= 38) {
+        chosenMode = 'special';
+      } else if (ai.turretId === 'bloodsucker' && distNow <= TURRET_CATALOG.bloodsucker.range) {
         chosenMode = 'special';
       } else if (ai.turretId === 'piercing' && distNow <= 85) {
         chosenMode = 'special';
@@ -522,6 +814,7 @@ async function runAITurn(game, sendMessage, isActive) {
         const tx = isMidPoint ? ox + (px - ox) * offsetFactor : px;
         const ty = isMidPoint ? oy + (py - oy) * offsetFactor : py;
         const shotEvents = resolveShot(game, ai, chosenMode, fireAngle, tx, ty);
+        game.deployables = (game.deployables || []).filter((d) => d.hp > 0);
         ai.canShoot = ai.trapBurstRemaining > 0;
 
         const weaponLabel = chosenMode === 'special2'
@@ -572,6 +865,10 @@ async function runAITurn(game, sendMessage, isActive) {
   game.phase = 'player';
   game.endingTurn = false;
   game.activeControl = 'player';
+  if (player) {
+    player.rageActive = false;
+    player.rageDamageReduction = 0;
+  }
   armTeamTraps(game, 'player');
   applyTurnStartPoison(game, player, sendMessage);
   if (checkGameOver(game)) {
@@ -626,13 +923,117 @@ async function runAITurn(game, sendMessage, isActive) {
   sendMessage(serializeState(game));
 }
 
+async function advancePvpTurn(game, sendMessage, isActive, skipDelayMs = 800, stunDepth = 0) {
+  if (!game || !game.isPvp || game.phase !== 'player' || game.endingTurn) return;
+  const prevTeam = game.activeTeam || 'player1';
+  const prevTank = game.tanks.find((t) => t.id === prevTeam);
+
+  if (prevTank && prevTank.trapBurstRemaining > 0) {
+    prevTank.trapBurstRemaining = 0;
+    prevTank.special2Cooldown = SPECIAL2_CATALOG.trap.cooldown;
+  }
+  if (prevTank) {
+    if (!prevTank.wasStunnedThisTurn && (prevTank.silencedTurns || 0) > 0) {
+      prevTank.silencedTurns -= 1;
+    }
+    prevTank.wasStunnedThisTurn = false;
+  }
+
+  game.endingTurn = true;
+  await runDeployableTurrets(game, prevTeam, sendMessage, isActive);
+  if (!isActive() || game.phase === 'gameover') {
+    game.endingTurn = false;
+    return;
+  }
+
+  const nextTeam = prevTeam === 'player1' ? 'player2' : 'player1';
+  if (nextTeam === 'player1') {
+    tickMolotovZones(game, sendMessage);
+    if (checkGameOver(game)) {
+      game.endingTurn = false;
+      sendMessage({ type: 'sync_state' });
+      return;
+    }
+    game.turnNumber += 1;
+  }
+
+  const nextTank = game.tanks.find((t) => t.id === nextTeam);
+  game.activeTeam = nextTeam;
+  game.activeControl = nextTeam;
+  game.endingTurn = false;
+
+  if (!nextTank || !nextTank.alive) {
+    checkGameOver(game);
+    sendMessage({ type: 'sync_state' });
+    return;
+  }
+
+  nextTank.rageActive = false;
+  nextTank.rageDamageReduction = 0;
+  armTeamTraps(game, nextTeam);
+  applyTurnStartPoison(game, nextTank, sendMessage);
+  if (checkGameOver(game)) {
+    sendMessage({ type: 'sync_state' });
+    return;
+  }
+
+  nextTank.trapBurstRemaining = 0;
+  if (nextTank.specialCooldown > 0) nextTank.specialCooldown--;
+  if (nextTank.special2Cooldown > 0 && !nextTank.chargedReady) nextTank.special2Cooldown--;
+
+  for (const d of game.deployables) {
+    if (d.kind === 'drone' && d.ownerId === nextTank.id && d.hp > 0) {
+      d.moveAp = d.maxMoveAp;
+      d.canShoot = true;
+      if ((d.droneSpecial2Cooldown || 0) > 0) d.droneSpecial2Cooldown--;
+    }
+  }
+
+  if ((nextTank.stunnedTurns || 0) > 0 && stunDepth < 4) {
+    nextTank.stunnedTurns -= 1;
+    const isEmpStun = nextTank.stunReason === 'emp';
+    nextTank.stunReason = null;
+    nextTank.wasStunnedThisTurn = true;
+    nextTank.moveAp = 0;
+    nextTank.canShoot = false;
+    if (nextTank.slowedTurns > 0) nextTank.slowedTurns--;
+    game.logs.unshift(
+      isEmpStun
+        ? `⚡ ${nextTank.name} está aturdido por PEM y pierde este turno.`
+        : `❄️ ${nextTank.name} está congelado y pierde este turno.`
+    );
+    sendMessage({ type: 'sync_state' });
+    sendMessage({
+      type: 'toast',
+      message: `${nextTank.name} pierde el turno por ${isEmpStun ? 'PEM' : 'Congelación'}.`
+    });
+    if (skipDelayMs > 0) await delay(skipDelayMs);
+    if (isActive() && game.phase === 'player' && !game.endingTurn && nextTank.alive) {
+      await advancePvpTurn(game, sendMessage, isActive, skipDelayMs, stunDepth + 1);
+    }
+    return;
+  }
+
+  nextTank.wasStunnedThisTurn = false;
+  nextTank.moveAp = computeTurnMoveAp(nextTank);
+  if (nextTank.slowedTurns > 0) nextTank.slowedTurns--;
+  if (nextTank.empSlowTurns > 0) nextTank.empSlowTurns--;
+  nextTank.canShoot = true;
+  game.logs.unshift(`--- Turno ${game.turnNumber}: Turno de ${nextTank.name} ---`);
+  sendMessage({ type: 'sync_state' });
+}
+
 module.exports = {
   delay,
   createMatch,
+  createPvpMatch,
+  getGameActiveTeam,
+  getControlledTank,
   checkGameOver,
   serializeGrid,
   serializeState,
   runDeployableTurrets,
   beginAITurn,
-  runAITurn
+  runAITurn,
+  advancePvpTurn
 };

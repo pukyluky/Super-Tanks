@@ -1,15 +1,133 @@
 import { CELL_PX } from '../constants.js';
-import { state, canvas, terrainCanvas, dom, showToast } from '../state.js';
+import { state, getMyTeamId, canvas, terrainCanvas, dom, showToast } from '../state.js';
 import { rebuildTerrainCanvas, redrawCellsNeighborhood } from '../assets/terrainSprites.js';
 import { spawnExplosionParticles } from '../render/effects.js';
 import { syncVisualTanks } from '../render/renderer.js';
 import { renderHangarOptions } from '../ui/hangar.js';
 import { updateHUD } from '../ui/hud.js';
+import { legacyModem } from './modemAudio.js';
+import { handleAdhocServerMessage, updateHostAddrDisplay } from '../ui/multiplayer.js';
 
-export function sendWs(payload) {
+const LEGACY_TX_ACTIONS = new Set(['move_step', 'move_to', 'shoot', 'switch_control', 'end_turn']);
+
+export function sendLocalWs(payload) {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
   }
+}
+
+export function sendWs(payload) {
+  if (state.gameMode === 'pvp_legacy' && payload && LEGACY_TX_ACTIONS.has(payload.type)) {
+    const quantized = { ...payload };
+    if (quantized.type === 'shoot') {
+      quantized.angle = Math.round((Number(quantized.angle) || 0) * 10000) / 10000;
+      quantized.targetX = Math.round((Number(quantized.targetX) || 0) * 10) / 10;
+      quantized.targetY = Math.round((Number(quantized.targetY) || 0) * 10) / 10;
+    } else if (quantized.type === 'move_to') {
+      quantized.x = Math.round(Number(quantized.x) || 0);
+      quantized.y = Math.round(Number(quantized.y) || 0);
+    }
+    sendLocalWs(quantized);
+    if (legacyModem) {
+      legacyModem.sendPacket({ ...quantized, actorTeam: getMyTeamId() });
+    }
+    return;
+  }
+
+  if (state.adhocWs && state.adhocWs.readyState === WebSocket.OPEN) {
+    state.adhocWs.send(JSON.stringify(payload));
+    return;
+  }
+  sendLocalWs(payload);
+}
+
+export function closeRemoteAdhoc() {
+  if (state.adhocWs) {
+    try {
+      state.adhocWs.onclose = null;
+      state.adhocWs.close();
+    } catch (_) {}
+    state.adhocWs = null;
+  }
+}
+
+export function normalizeAdhocAddress(rawHostAddr, fallbackPort = 3000) {
+  let raw = String(rawHostAddr || '').trim();
+  let extractedCode = '';
+  const codeMatch = raw.match(/\|\s*c[oó]digo\s*:\s*([A-Za-z0-9]+)/i);
+  if (codeMatch) {
+    extractedCode = codeMatch[1].toUpperCase();
+    raw = raw.slice(0, codeMatch.index).trim();
+  }
+  let cleanHost = raw
+    .replace(/^wss?:\/\//i, '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .trim();
+  if (cleanHost.includes('|')) {
+    cleanHost = cleanHost.split('|')[0].trim();
+  }
+  if (!cleanHost) return { hostPort: '', extractedCode };
+
+  const hasPort = cleanHost.startsWith('[')
+    ? /\]:\d+$/.test(cleanHost)
+    : /:\d+$/.test(cleanHost);
+  if (!hasPort) {
+    const port = (state.hostInfo && state.hostInfo.port) || fallbackPort || 3000;
+    cleanHost = `${cleanHost}:${port}`;
+  }
+  return { hostPort: cleanHost, extractedCode };
+}
+
+export function connectRemoteAdhoc(rawHostAddr, initialPayload) {
+  closeRemoteAdhoc();
+  const { hostPort: cleanHost } = normalizeAdhocAddress(rawHostAddr);
+  if (!cleanHost) {
+    showToast('Introduce la dirección IP:Puerto del Host.');
+    return;
+  }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${cleanHost}`);
+  state.adhocWs = ws;
+  let opened = false;
+  let lastErrorMsg = '';
+
+  ws.onopen = () => {
+    opened = true;
+    if (dom.adhocGuestStatus) dom.adhocGuestStatus.textContent = `Conectado a ${cleanHost}. Sincronizando sala...`;
+    ws.send(JSON.stringify(initialPayload));
+  };
+
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'catalog') return;
+      handleServerMessage(msg);
+    } catch (e) {
+      console.error('Error parseando mensaje Ad-Hoc WS:', e);
+    }
+  };
+
+  ws.onerror = (ev) => {
+    lastErrorMsg = (ev && ev.message) || ws.lastErrorMessage || `No se pudo conectar al Host ${cleanHost}`;
+    showToast(lastErrorMsg);
+    if (dom.adhocGuestStatus) dom.adhocGuestStatus.textContent = lastErrorMsg;
+  };
+
+  ws.onclose = () => {
+    if (state.adhocWs === ws) {
+      state.adhocWs = null;
+      if (!opened && dom.adhocGuestStatus) {
+        dom.adhocGuestStatus.textContent = lastErrorMsg || `No se pudo conectar a ${cleanHost} (comprueba IP, puerto y Firewall).`;
+      }
+      if (state.gameMode === 'pvp_adhoc' && !dom.battleScreen.classList.contains('hidden')) {
+        showToast('Conexión con el Host Ad-Hoc cerrada.');
+        dom.gameoverOverlay.classList.add('hidden');
+        dom.battleScreen.classList.add('hidden');
+        dom.hangarScreen.classList.remove('hidden');
+      }
+    }
+  };
 }
 
 export function applyShotResolved(msg) {
@@ -61,6 +179,16 @@ export function applyShotResolved(msg) {
       life: 1.0
     });
   }
+  for (const hl of ev.heals || []) {
+    spawnExplosionParticles(hl.x, hl.y, 1.5, 'heal');
+    state.floatingTexts.push({
+      x: hl.x * CELL_PX,
+      y: hl.y * CELL_PX - 18,
+      text: `+${hl.amount} PV`,
+      color: '#4ade80',
+      life: 1.1
+    });
+  }
 
   updateHUD();
 }
@@ -100,8 +228,13 @@ export function initShutdownButtons() {
 }
 
 function handleServerMessage(msg) {
+  if (handleAdhocServerMessage(msg)) {
+    return;
+  }
+
   if (msg.type === 'catalog') {
     state.catalog = msg;
+    state.hostInfo = msg.hostInfo || state.hostInfo;
     state.gridW = msg.gridW;
     state.gridH = msg.gridH;
     state.tankSize = msg.tankSize;
@@ -110,6 +243,7 @@ function handleServerMessage(msg) {
     terrainCanvas.width = canvas.width;
     terrainCanvas.height = canvas.height;
     renderHangarOptions();
+    updateHostAddrDisplay();
     dom.startBtn.disabled = false;
     return;
   }
@@ -124,15 +258,44 @@ function handleServerMessage(msg) {
       }
     }
 
+    state.gameMode = msg.mode || 'pve';
+    state.isPvp = Boolean(msg.isPvp);
+    state.activeTeam = msg.activeTeam || 'player';
+    if (msg.myTeam) state.myTeam = msg.myTeam;
+    if (msg.turnNumber === 1) {
+      dom.gameoverOverlay.classList.add('hidden');
+    }
+
     state.grid = msg.grid;
     state.tanks = msg.tanks;
     state.hazards = msg.hazards || [];
     state.deployables = msg.deployables || [];
     state.turnNumber = msg.turnNumber;
     state.phase = msg.phase;
-    state.activeControl = msg.activeControl || 'player';
+    state.activeControl = msg.activeControl || getMyTeamId();
     state.winner = msg.winner;
     state.logs = msg.logs || [];
+
+    if (dom.legacyBattleBox) {
+      dom.legacyBattleBox.classList.toggle('hidden', state.gameMode !== 'pvp_legacy');
+    }
+    if (dom.enemyPanelTitle) {
+      dom.enemyPanelTitle.textContent = state.isPvp ? 'Rival PvP' : 'Tanques Enemigos';
+    }
+
+    if (enteringBattle || msg.turnNumber === 1) {
+      state.mobileInfoOpen = false;
+      const myTank = state.tanks.find((t) => t.id === getMyTeamId());
+      if (myTank) {
+        const ang = myTank.aimAngle || 0;
+        const ox = myTank.x + state.tankSize / 2;
+        const oy = myTank.y + state.tankSize / 2;
+        state.mouseGrid = {
+          x: ox + Math.cos(ang) * 18,
+          y: oy + Math.sin(ang) * 18
+        };
+      }
+    }
 
     syncVisualTanks(enteringBattle || msg.turnNumber === 1);
     rebuildTerrainCanvas();

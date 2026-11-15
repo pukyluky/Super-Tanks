@@ -95,6 +95,21 @@ const NETRUNNER_TANK = {
   desc: 'Básico: Escopeta Corta. Especiales: Dron controlable (2 PV, 20 daño) y Bomba PEM (aturde/suprime).'
 };
 
+const BERSERKER_TANK = {
+  id: 'berserker',
+  name: 'Berserker',
+  passive: 'berserk',
+  passiveName: 'Furia de Sangre',
+  passiveDesc: '+1% de daño en todas las armas por cada 1% de vida perdida.',
+  turretId: 'bloodsucker',
+  specialName: 'Chupasangre',
+  special2Id: 'rage',
+  special2Name: 'Ira',
+  color: '#e11d48',
+  accent: '#881337',
+  desc: 'Pasiva: +1% daño por cada 1% PV perdido. Especiales: Chupasangre (robo de vida) e Ira (<25% PV: -90% daño recibido, +25% mov.).'
+};
+
 const TANK_TYPES_CATALOG = {
   artillery: ARTILLERY_TANK,
   breacher: BREACHER_TANK,
@@ -103,7 +118,8 @@ const TANK_TYPES_CATALOG = {
   engineer: ENGINEER_TANK,
   chemist: CHEMIST_TANK,
   cain: CAIN_TANK,
-  netrunner: NETRUNNER_TANK
+  netrunner: NETRUNNER_TANK,
+  berserker: BERSERKER_TANK
 };
 
 const DIFFICULTY_CONFIG = {
@@ -145,6 +161,7 @@ module.exports = {
   CHEMIST_TANK,
   CAIN_TANK,
   NETRUNNER_TANK,
+  BERSERKER_TANK,
   TANK_TYPES_CATALOG,
   DIFFICULTY_CONFIG
 };
