@@ -35,10 +35,11 @@ const PIERCING_ABILITY = {
   id: 'piercing',
   name: 'Rifle Perforante',
   cooldown: 2,
-  piercePower: 6,
+  maxWallPierce: 1,
+  piercePower: 1,
   specialDamage: 40,
   specialRadius: 1.5,
-  desc: 'Atraviesa múltiples bloques de ladrillo y tanques en línea recta.'
+  desc: 'Perfora 1 única pared de ladrillo y atraviesa tanques sin límite en línea recta.'
 };
 
 const BUILDER_ABILITY = {

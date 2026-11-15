@@ -308,29 +308,67 @@ function drawRicochetPreview(ctx, ox, oy, angle, ignoreId, bounces) {
   }
 }
 
-function drawPiercingPreview(ctx, ox, oy, angle, ignoreId, piercePower) {
+function drawPiercingPreview(ctx, ox, oy, angle, ignoreId, maxWallPierce = 1) {
+  const grid = state.grid;
+  const gridW = state.gridW;
+  const gridH = state.gridH;
+  if (!grid || !gridH || !gridW) return;
+
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
-  let curX = ox;
-  let curY = oy;
-  let power = piercePower;
-  let endX = ox;
-  let endY = oy;
-  let hitSteel = false;
+  let gx = Math.floor(ox);
+  let gy = Math.floor(oy);
+  const stepX = dx >= 0 ? 1 : -1;
+  const stepY = dy >= 0 ? 1 : -1;
+  const tDeltaX = dx === 0 ? 1e12 : Math.abs(1 / dx);
+  const tDeltaY = dy === 0 ? 1e12 : Math.abs(1 / dy);
+  let tMaxX = dx === 0 ? 1e12 : (dx > 0 ? (gx + 1 - ox) : (ox - gx)) * tDeltaX;
+  let tMaxY = dy === 0 ? 1e12 : (dy > 0 ? (gy + 1 - oy) : (oy - gy)) * tDeltaY;
 
-  for (let step = 0; step < 30 && power > 0; step++) {
-    const wallHit = raycastWallClient(curX, curY, dx, dy, 170);
-    endX = wallHit.x;
-    endY = wallHit.y;
-    if (!wallHit.hit || wallHit.cellVal === -1) {
-      hitSteel = wallHit.cellVal === -1;
+  let t = 0;
+  let wallsPierced = 0;
+  let inBrickWall = false;
+  let stoppedByBarrier = false;
+
+  for (let iter = 0; iter < 500; iter++) {
+    if (gx < 0 || gy < 0 || gx >= gridW || gy >= gridH) {
+      stoppedByBarrier = true;
       break;
     }
-    power--;
-    curX = wallHit.x + dx * 0.9;
-    curY = wallHit.y + dy * 0.9;
-    if (curX < 1 || curX >= state.gridW - 1 || curY < 1 || curY >= state.gridH - 1) break;
+    const cellVal = grid[gy][gx];
+    if (iter > 0) {
+      if (cellVal === -1) {
+        stoppedByBarrier = true;
+        break;
+      }
+      if (cellVal === 0) {
+        inBrickWall = false;
+      } else if (!inBrickWall) {
+        if (wallsPierced >= maxWallPierce) {
+          stoppedByBarrier = true;
+          break;
+        }
+        wallsPierced++;
+        inBrickWall = true;
+      }
+    }
+    if (tMaxX < tMaxY) {
+      t = tMaxX;
+      tMaxX += tDeltaX;
+      gx += stepX;
+    } else {
+      t = tMaxY;
+      tMaxY += tDeltaY;
+      gy += stepY;
+    }
+    if (t > 180) {
+      t = 180;
+      break;
+    }
   }
+
+  const endX = ox + dx * t;
+  const endY = oy + dy * t;
 
   ctx.strokeStyle = 'rgba(167, 139, 250, 0.82)';
   ctx.lineWidth = 2;
@@ -340,7 +378,22 @@ function drawPiercingPreview(ctx, ox, oy, angle, ignoreId, piercePower) {
   ctx.lineTo(endX * CELL_PX, endY * CELL_PX);
   ctx.stroke();
 
-  if (hitSteel) {
+  for (const tank of state.tanks) {
+    if (!tank.alive || tank.id === ignoreId) continue;
+    const ht = intersectRayAABB(ox, oy, dx, dy, tank.x, tank.y, state.tankSize, state.tankSize);
+    if (ht !== null && ht <= t) {
+      drawTargetHitMarker(ctx, (ox + dx * ht) * CELL_PX, (oy + dy * ht) * CELL_PX, 'rgba(52, 211, 153, 0.95)');
+    }
+  }
+  for (const dep of state.deployables || []) {
+    if (dep.hp <= 0 || dep.id === ignoreId) continue;
+    const ht = intersectRayAABB(ox, oy, dx, dy, dep.x, dep.y, dep.size, dep.size);
+    if (ht !== null && ht <= t) {
+      drawTargetHitMarker(ctx, (ox + dx * ht) * CELL_PX, (oy + dy * ht) * CELL_PX, 'rgba(52, 211, 153, 0.95)');
+    }
+  }
+
+  if (stoppedByBarrier) {
     drawWallImpactMarker(ctx, endX * CELL_PX, endY * CELL_PX, 'rgba(248, 113, 113, 0.85)');
   }
 }
@@ -393,7 +446,7 @@ export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
     drawRicochetPreview(ctx, ox, oy, angle, aimUnit.id, tu.bounces);
   } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'piercing' && player.specialCooldown === 0) {
     const tu = state.catalog.turrets.piercing;
-    drawPiercingPreview(ctx, ox, oy, angle, aimUnit.id, tu.piercePower);
+    drawPiercingPreview(ctx, ox, oy, angle, aimUnit.id, tu.maxWallPierce ?? 1);
   } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'builder' && player.specialCooldown === 0) {
     const tu = state.catalog.turrets.builder;
     const dist = Math.min(tu.range, Math.max(6, Math.hypot(state.mouseGrid.x - ox, state.mouseGrid.y - oy)));

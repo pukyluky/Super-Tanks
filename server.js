@@ -5,6 +5,9 @@ const path = require('path');
 
 const { PORT, PUBLIC_DIR, MIME_TYPES } = require('./src/config/constants');
 const { attachWebSocketSession } = require('./src/net/sessionHandler');
+const { createAdhocDiscovery } = require('./src/net/adhocDiscovery');
+
+const adhocDiscovery = createAdhocDiscovery();
 
 function isVirtualAdapter(name) {
   return /(vethernet|vmware|virtualbox|vbox|hyper-v|wsl|docker|tailscale|zerotier|hamachi|radmin|tun|tap|loopback)/i.test(name || '');
@@ -60,6 +63,7 @@ function shutdownServer() {
     idleShutdownTimer = null;
   }
   console.log('Cerrando servidor por petición del jugador...');
+  adhocDiscovery.stop();
   for (const sock of activeWsSockets) {
     try {
       sock.end();
@@ -84,6 +88,78 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, message: 'Servidor cerrándose...' }));
     setTimeout(shutdownServer, 80);
     return;
+  }
+  if (urlPath === '/api/display-settings') {
+    const winApi = process.env.TANQUES_WINDOW_API;
+    if (req.method === 'GET') {
+      if (!winApi) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, nativeWindow: false }));
+        return;
+      }
+      const fwd = http.request(`${winApi}status`, { method: 'GET', timeout: 1500 }, (upRes) => {
+        const chunks = [];
+        upRes.on('data', (c) => chunks.push(c));
+        upRes.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(Buffer.concat(chunks));
+        });
+      });
+      fwd.on('error', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, nativeWindow: false }));
+      });
+      fwd.end();
+      return;
+    }
+    if (req.method === 'POST') {
+      const reqChunks = [];
+      req.on('data', (c) => reqChunks.push(c));
+      req.on('end', () => {
+        let parsed = {};
+        try {
+          parsed = JSON.parse(Buffer.concat(reqChunks).toString('utf8') || '{}');
+        } catch (_) {}
+        const displayMode = ['windowed', 'borderless', 'fullscreen'].includes(parsed.displayMode)
+          ? parsed.displayMode
+          : 'windowed';
+        const resolution = typeof parsed.resolution === 'string' && /^(auto|\d{3,4}x\d{3,4})$/.test(parsed.resolution)
+          ? parsed.resolution
+          : '1340x880';
+
+        if (!winApi) {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: true, nativeWindow: false, displayMode, resolution }));
+          return;
+        }
+        const payload = JSON.stringify({ displayMode, resolution });
+        const fwd = http.request(
+          `${winApi}apply`,
+          {
+            method: 'POST',
+            timeout: 2000,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Content-Length': Buffer.byteLength(payload)
+            }
+          },
+          (upRes) => {
+            const chunks = [];
+            upRes.on('data', (c) => chunks.push(c));
+            upRes.on('end', () => {
+              res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(Buffer.concat(chunks));
+            });
+          }
+        );
+        fwd.on('error', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: true, nativeWindow: false, displayMode, resolution }));
+        });
+        fwd.end(payload);
+      });
+      return;
+    }
   }
 
   const safePath = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
@@ -113,10 +189,12 @@ server.on('upgrade', (req, socket) => {
     shutdownServer,
     onWsConnected,
     onWsDisconnected,
-    getHostInfo: () => ({ port: PORT, lanIps: getLanIpv4Addresses() })
+    getHostInfo: () => ({ port: PORT, lanIps: getLanIpv4Addresses() }),
+    adhocDiscovery
   });
 });
 
 server.listen(PORT, () => {
+  adhocDiscovery.start(PORT);
   console.log(`Servidor de Tanques Táctico 2D escuchando en http://localhost:${PORT}`);
 });

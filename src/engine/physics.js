@@ -100,6 +100,90 @@ function raycastWallDDA(grid, ox, oy, dx, dy, maxDist = 200) {
   };
 }
 
+/**
+ * Traza un rayo perforador capaz de atravesar hasta maxWallPierce paredes
+ * contiguas de ladrillo (sin límite de espesor de esa pared) y detenerse
+ * ante acero o al tocar una pared adicional.
+ */
+function tracePiercingRay(grid, ox, oy, dx, dy, maxDist = 180, maxWallPierce = 1) {
+  let gx = Math.floor(ox);
+  let gy = Math.floor(oy);
+
+  const stepX = dx >= 0 ? 1 : -1;
+  const stepY = dy >= 0 ? 1 : -1;
+  const tDeltaX = dx === 0 ? 1e12 : Math.abs(1 / dx);
+  const tDeltaY = dy === 0 ? 1e12 : Math.abs(1 / dy);
+  let tMaxX = dx === 0 ? 1e12 : (dx > 0 ? (gx + 1 - ox) : (ox - gx)) * tDeltaX;
+  let tMaxY = dy === 0 ? 1e12 : (dy > 0 ? (gy + 1 - oy) : (oy - gy)) * tDeltaY;
+
+  let t = 0;
+  let wallsPierced = 0;
+  let inBrickWall = false;
+  let lastBrickImpactT = -1;
+  const wallImpacts = [];
+  let stopReason = 'range';
+
+  for (let iter = 0; iter < 500; iter++) {
+    if (gx < 0 || gy < 0 || gx >= GRID_W || gy >= GRID_H) {
+      stopReason = 'steel';
+      break;
+    }
+
+    const cellVal = grid[gy][gx];
+    if (iter > 0) {
+      if (cellVal === CELL_STEEL) {
+        stopReason = 'steel';
+        break;
+      }
+      if (cellVal === CELL_EMPTY) {
+        if (inBrickWall) {
+          inBrickWall = false;
+          wallImpacts.push({ x: ox + dx * t, y: oy + dy * t, kind: 'exit' });
+        }
+      } else {
+        if (!inBrickWall) {
+          if (wallsPierced >= maxWallPierce) {
+            wallImpacts.push({ x: ox + dx * t, y: oy + dy * t, kind: 'stop' });
+            stopReason = 'wall_limit';
+            break;
+          }
+          wallsPierced++;
+          inBrickWall = true;
+          lastBrickImpactT = t;
+          wallImpacts.push({ x: ox + dx * t, y: oy + dy * t, kind: 'pierce' });
+        } else if (t - lastBrickImpactT >= 1.5) {
+          lastBrickImpactT = t;
+          wallImpacts.push({ x: ox + dx * t, y: oy + dy * t, kind: 'pierce' });
+        }
+      }
+    }
+
+    if (tMaxX < tMaxY) {
+      t = tMaxX;
+      tMaxX += tDeltaX;
+      gx += stepX;
+    } else {
+      t = tMaxY;
+      tMaxY += tDeltaY;
+      gy += stepY;
+    }
+
+    if (t > maxDist) {
+      t = maxDist;
+      break;
+    }
+  }
+
+  return {
+    finalT: t,
+    endX: ox + dx * t,
+    endY: oy + dy * t,
+    wallsPierced,
+    stopReason,
+    wallImpacts
+  };
+}
+
 function findClosestTankHit(tanks, ox, oy, dx, dy, maxDist, ignoreTankId, deployables = []) {
   let best = null;
   for (const tank of tanks) {
@@ -367,6 +451,7 @@ function isTankExposedToObserverAt(grid, tanks, observer, targetTankId, posX, po
 module.exports = {
   intersectRayAABB,
   raycastWallDDA,
+  tracePiercingRay,
   findClosestTankHit,
   findNearestEmptyPoint,
   computeOutgoingDamage,

@@ -92,28 +92,44 @@
 
               <div id="adhoc-config-box" class="mp-box hidden">
                 <div class="mp-subtabs">
-                  <button id="adhoc-tab-host" class="pill active">Host (Crear Sala)</button>
-                  <button id="adhoc-tab-guest" class="pill">Invitado (Unirse)</button>
+                  <button id="adhoc-tab-host" class="pill active">Host (Promocionar)</button>
+                  <button id="adhoc-tab-guest" class="pill">Conectarse (Lista)</button>
                 </div>
                 <div id="adhoc-host-pane">
-                  <div class="mp-hint">Dirección Host: <code id="adhoc-host-addr">detectando...</code></div>
+                  <div class="mp-field-row">
+                    <input id="adhoc-ssid-input" class="mp-input" type="text" maxlength="32" placeholder="SSID / Nombre del punto de conexión (ej: Tanques-Salon)" />
+                  </div>
+                  <div class="mp-hint">Red local detectada: <code id="adhoc-host-addr">detectando...</code></div>
                   <div class="mp-actions-row">
-                    <button id="adhoc-create-btn" class="btn-accent">Crear Sala Ad-Hoc</button>
-                    <button id="adhoc-cancel-btn" class="btn-ghost hidden">Cancelar Sala</button>
+                    <button id="adhoc-create-btn" class="btn-accent">Promocionar Punto y Crear Sala</button>
+                    <button id="adhoc-cancel-btn" class="btn-ghost hidden">Dejar de Promocionar</button>
                   </div>
                   <div id="adhoc-room-wait" class="mp-status-card hidden">
-                    <span>Sala lista • Código: <strong id="adhoc-room-code">----</strong></span>
-                    <button id="adhoc-copy-btn" class="btn-ghost btn-mini">Copiar IP+Código</button>
-                    <small>Esperando al jugador invitado...</small>
+                    <span>📡 Punto activo: <strong id="adhoc-room-ssid">Tanques</strong></span>
+                    <span>🔑 Contraseña (código): <strong id="adhoc-room-code">----</strong></span>
+                    <button id="adhoc-copy-btn" class="btn-ghost btn-mini">Copiar Datos</button>
+                    <small>Promocionando punto en la red local. Esperando al jugador invitado...</small>
                   </div>
                 </div>
                 <div id="adhoc-guest-pane" class="hidden">
-                  <div class="mp-field-row">
-                    <input id="adhoc-join-addr" class="mp-input" type="text" placeholder="IP:Puerto del Host (ej: 192.168.1.20:3000)" />
-                    <input id="adhoc-join-code" class="mp-input code-input" type="text" maxlength="6" placeholder="CÓDIGO" />
+                  <div class="mp-list-header">
+                    <span class="mp-hint">Puntos de conexión detectados en tu red / Hotspot:</span>
+                    <button id="adhoc-refresh-btn" type="button" class="btn-ghost btn-mini">🔄 Actualizar</button>
                   </div>
-                  <button id="adhoc-join-btn" class="btn-primary btn-full">Sincronizar y Unirse</button>
-                  <div id="adhoc-guest-status" class="mp-hint">Introduce la IP y código que ve el Host.</div>
+                  <div id="adhoc-room-list" class="mp-room-list">
+                    <div class="mp-room-empty">Buscando puntos de acceso Ad-Hoc...</div>
+                  </div>
+                  <div class="mp-field-row">
+                    <input id="adhoc-join-code" class="mp-input code-input" type="text" maxlength="6" placeholder="CLAVE" />
+                    <button id="adhoc-join-btn" class="btn-primary">Conectarse y Unirse</button>
+                  </div>
+                  <div id="adhoc-guest-status" class="mp-hint">Selecciona un punto de la lista e introduce el código del Host como contraseña.</div>
+                  <details class="mp-manual-box">
+                    <summary>Conexión manual por IP:Puerto (respaldo opcional)</summary>
+                    <div class="mp-field-row" style="margin-top:6px;">
+                      <input id="adhoc-join-addr" class="mp-input" type="text" placeholder="Opcional: IP:Puerto (ej: 192.168.1.20:3000)" />
+                    </div>
+                  </details>
                 </div>
               </div>
 
@@ -176,7 +192,7 @@
           <div class="footer-actions">
             <button id="hangar-prev-btn" type="button" class="btn-ghost wizard-nav-btn hidden">← Volver</button>
             <button id="hangar-next-btn" type="button" class="btn-tool wizard-nav-btn hidden">Siguiente →</button>
-            <button id="settings-hangar-btn" type="button" class="btn-ghost" title="Ajustes de controles y sensibilidad">⚙️ Ajustes</button>
+            <button id="settings-hangar-btn" type="button" class="btn-ghost" title="Ajustes">⚙️ Ajustes</button>
             <button id="shutdown-hangar-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
             <button id="start-match-btn" class="btn-primary" disabled>Iniciar Batalla</button>
           </div>
@@ -220,7 +236,7 @@
           </div>
           <span class="divider"></span>
           <button id="mobile-info-btn" type="button" class="btn-tool mobile-only">📋 Táctica</button>
-          <button id="settings-battle-btn" type="button" class="btn-ghost" title="Ajustes de controles y sensibilidad">⚙️</button>
+          <button id="settings-battle-btn" type="button" class="btn-ghost" title="Ajustes">⚙️</button>
           <button id="end-turn-btn" class="btn-accent">Terminar Turno [Espacio]</button>
           <button id="back-hangar-btn" class="btn-ghost">Hangar</button>
           <button id="shutdown-battle-btn" class="btn-danger" title="Apagar el servidor Node.js del portátil">Cerrar Servidor</button>
@@ -327,11 +343,11 @@
     <div id="settings-overlay" class="overlay settings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="overlay-card settings-card">
         <div class="settings-header">
-          <h2 id="settings-title">⚙️ Ajustes de Controles</h2>
+          <h2 id="settings-title">⚙️ Ajustes</h2>
           <button id="settings-close-btn" type="button" class="btn-ghost btn-mini" aria-label="Cerrar ajustes">✕</button>
         </div>
 
-        <div class="settings-section">
+        <div id="settings-control-section" class="settings-section android-only-setting">
           <label class="section-label">Tipo de control de movimiento (lado izquierdo)</label>
           <div id="settings-control-options" class="settings-choice-grid">
             <button type="button" class="option-card settings-choice active" data-control-type="joystick">
@@ -345,7 +361,7 @@
           </div>
         </div>
 
-        <div class="settings-section">
+        <div id="settings-sensitivity-section" class="settings-section android-only-setting">
           <div class="settings-slider-head">
             <label for="settings-sensitivity" class="section-label">Sensibilidad del control</label>
             <span id="settings-sensitivity-val" class="sensitivity-badge">100% (Normal)</span>
@@ -358,6 +374,40 @@
             <button type="button" class="pill" data-sens="190">Máxima (190%)</button>
           </div>
           <p class="settings-hint">Ajusta la zona muerta, la velocidad de desplazamiento y la respuesta de apuntado.</p>
+        </div>
+
+        <div id="settings-display-section" class="settings-section pc-only-setting">
+          <div class="settings-section">
+            <label class="section-label">Modo de pantalla</label>
+            <div id="settings-display-mode-options" class="settings-mode-grid">
+              <button type="button" class="option-card settings-choice active" data-display-mode="windowed">
+                <div class="option-title"><span>🪟 Ventana</span></div>
+                <div class="option-desc">Marco clásico redimensionable.</div>
+              </button>
+              <button type="button" class="option-card settings-choice" data-display-mode="borderless">
+                <div class="option-title"><span>🖼️ Sin bordes</span></div>
+                <div class="option-desc">Ventana limpia sin barra ni marcos.</div>
+              </button>
+              <button type="button" class="option-card settings-choice" data-display-mode="fullscreen">
+                <div class="option-title"><span>🖥️ Pantalla completa</span></div>
+                <div class="option-desc">Ocupa toda la pantalla del monitor.</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <label for="settings-resolution-select" class="section-label">Resolución de pantalla</label>
+            <select id="settings-resolution-select" class="settings-select">
+              <option value="auto">Automática / Nativa del monitor</option>
+              <option value="1024x768">1024 × 768 (Compacta)</option>
+              <option value="1280x720">1280 × 720 (HD)</option>
+              <option value="1340x880" selected>1340 × 880 (Estándar)</option>
+              <option value="1600x900">1600 × 900 (HD+)</option>
+              <option value="1920x1080">1920 × 1080 (Full HD)</option>
+              <option value="2560x1440">2560 × 1440 (2K QHD)</option>
+            </select>
+            <p id="settings-display-hint" class="settings-hint">Aplica el tamaño y formato de ventana en PC. En modo sin bordes con resolución automática ocupa todo el monitor.</p>
+          </div>
         </div>
 
         <div class="overlay-actions settings-footer">

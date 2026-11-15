@@ -62,9 +62,15 @@ function leaveAdhocRoom(member, reason) {
   }
 }
 
+function sanitizeRoomSsid(rawSsid, code) {
+  const clean = String(rawSsid || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 32);
+  return clean || `Tanques-${code}`;
+}
+
 function createAdhocRoom(msg, hostMember) {
   leaveAdhocRoom(hostMember, 'Host creó una nueva sala.');
   const code = generateRoomCode();
+  const ssid = sanitizeRoomSsid(msg.ssid, code);
   hostMember.roomCode = code;
   hostMember.team = 'player1';
   hostMember.selection = {
@@ -75,6 +81,7 @@ function createAdhocRoom(msg, hostMember) {
 
   const room = {
     code,
+    ssid,
     mapStyle: msg.mapStyle || 'bunkers',
     host: hostMember,
     guest: null,
@@ -85,6 +92,7 @@ function createAdhocRoom(msg, hostMember) {
   hostMember.sendJson({
     type: 'adhoc_room_created',
     code,
+    ssid,
     mapStyle: room.mapStyle,
     myTeam: 'player1'
   });

@@ -11,6 +11,9 @@ export const state = {
   myTeam: 'player',
   activeTeam: 'player',
   adhocRoomCode: null,
+  adhocRoomSsid: null,
+  discoveredAdhocHosts: [],
+  selectedAdhocHostKey: null,
   legacyRole: null, // 'host' | 'guest'
   legacyChannel: 'acoustic', // 'acoustic' | 'loopback'
   legacyPeerSelection: null,
@@ -22,8 +25,10 @@ export const state = {
   hangarStep: 1,
   mobileInfoOpen: false,
   settings: {
-    controlType: 'joystick', // 'joystick' | 'dpad'
-    sensitivity: 1.0 // 0.5 .. 2.0
+    controlType: 'joystick', // 'joystick' | 'dpad' (Android)
+    sensitivity: 1.0, // 0.5 .. 2.0 (Android)
+    displayMode: 'windowed', // 'windowed' | 'borderless' | 'fullscreen' (PC)
+    resolution: '1340x880' // 'auto' | '<W>x<H>' (PC)
   },
 
   gridW: DEFAULT_GRID_W,
@@ -96,12 +101,16 @@ export const dom = {
   adhocTabGuest: document.getElementById('adhoc-tab-guest'),
   adhocHostPane: document.getElementById('adhoc-host-pane'),
   adhocGuestPane: document.getElementById('adhoc-guest-pane'),
+  adhocSsidInput: document.getElementById('adhoc-ssid-input'),
   adhocHostAddr: document.getElementById('adhoc-host-addr'),
   adhocCreateBtn: document.getElementById('adhoc-create-btn'),
   adhocCancelBtn: document.getElementById('adhoc-cancel-btn'),
   adhocRoomWait: document.getElementById('adhoc-room-wait'),
+  adhocRoomSsid: document.getElementById('adhoc-room-ssid'),
   adhocRoomCode: document.getElementById('adhoc-room-code'),
   adhocCopyBtn: document.getElementById('adhoc-copy-btn'),
+  adhocRefreshBtn: document.getElementById('adhoc-refresh-btn'),
+  adhocRoomList: document.getElementById('adhoc-room-list'),
   adhocJoinAddr: document.getElementById('adhoc-join-addr'),
   adhocJoinCode: document.getElementById('adhoc-join-code'),
   adhocJoinBtn: document.getElementById('adhoc-join-btn'),
@@ -159,6 +168,9 @@ export const dom = {
   settingsSensitivity: document.getElementById('settings-sensitivity'),
   settingsSensitivityVal: document.getElementById('settings-sensitivity-val'),
   settingsSensitivityPresets: document.getElementById('settings-sensitivity-presets'),
+  settingsDisplayModeOptions: document.getElementById('settings-display-mode-options'),
+  settingsResolutionSelect: document.getElementById('settings-resolution-select'),
+  settingsDisplayHint: document.getElementById('settings-display-hint'),
   endTurnBtn: document.getElementById('end-turn-btn'),
   backHangarBtn: document.getElementById('back-hangar-btn'),
   shutdownHangarBtn: document.getElementById('shutdown-hangar-btn'),
@@ -174,12 +186,19 @@ export const dom = {
   overlayHangarBtn: document.getElementById('overlay-hangar-btn')
 };
 
+export function isAndroidPlatform() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.AndroidBridge || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')));
+}
+
 export function isMobileUi() {
   if (typeof window === 'undefined') return false;
   if (window.AndroidBridge) return true;
   if (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) return true;
-  if (window.innerWidth <= 960) return true;
-  if (window.innerHeight <= 560 && window.innerWidth <= 1050) return true;
+  if (isAndroidPlatform()) {
+    if (window.innerWidth <= 960) return true;
+    if (window.innerHeight <= 560 && window.innerWidth <= 1050) return true;
+  }
   return false;
 }
 
@@ -188,6 +207,7 @@ const SETTINGS_STORAGE_KEY = 'tanques_controls_settings_v1';
 export function applySettingsToDom() {
   if (typeof document === 'undefined') return;
   document.body.dataset.controlType = state.settings.controlType === 'dpad' ? 'dpad' : 'joystick';
+  document.body.dataset.displayMode = state.settings.displayMode || 'windowed';
 }
 
 export function loadSettings() {
@@ -201,6 +221,12 @@ export function loadSettings() {
       const sens = Number(parsed?.sensitivity);
       if (Number.isFinite(sens) && sens >= 0.5 && sens <= 2.0) {
         state.settings.sensitivity = Math.round(sens * 20) / 20;
+      }
+      if (parsed && ['windowed', 'borderless', 'fullscreen'].includes(parsed.displayMode)) {
+        state.settings.displayMode = parsed.displayMode;
+      }
+      if (typeof parsed?.resolution === 'string' && /^(auto|\d{3,4}x\d{3,4})$/.test(parsed.resolution)) {
+        state.settings.resolution = parsed.resolution;
       }
     }
   } catch (_) {}
@@ -216,8 +242,11 @@ export function saveSettings() {
 
 export function syncViewportClasses() {
   if (typeof document === 'undefined') return;
+  const android = isAndroidPlatform();
   const mobile = isMobileUi();
   const landscape = window.innerWidth >= window.innerHeight;
+  document.body.classList.toggle('android-platform', android);
+  document.body.classList.toggle('pc-platform', !android);
   document.body.classList.toggle('mobile-mode', mobile);
   document.body.classList.toggle('landscape-mode', landscape);
   document.body.classList.toggle('portrait-mode', !landscape);

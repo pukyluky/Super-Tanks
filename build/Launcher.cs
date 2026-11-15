@@ -83,6 +83,324 @@ namespace TanquesTacticosLauncher
         private const string AppFolderName = "TanquesTacticos2D";
         private const string PayloadResourceName = "Tanques.payload.zip";
 
+        private static class NativeWin
+        {
+            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+            [DllImport("user32.dll")]
+            public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+            [DllImport("user32.dll")]
+            public static extern bool IsWindow(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern bool IsWindowVisible(IntPtr hWnd);
+
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+            public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+            [DllImport("user32.dll")]
+            public static extern int GetWindowTextLength(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+            [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+            public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+            [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+            public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+            [DllImport("user32.dll")]
+            public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+            [DllImport("user32.dll")]
+            public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+            public const int GWL_STYLE = -16;
+            public const long WS_FRAME_BITS = 0x00CF0000L; // WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+            public const uint SWP_NOZORDER = 0x0004;
+            public const uint SWP_NOACTIVATE = 0x0010;
+            public const uint SWP_FRAMECHANGED = 0x0020;
+            public const uint SWP_SHOWWINDOW = 0x0040;
+            public const int SW_RESTORE = 9;
+        }
+
+        private sealed class DisplaySettings
+        {
+            public string DisplayMode = "windowed";
+            public string Resolution = "1340x880";
+        }
+
+        private static readonly object WindowSync = new object();
+        private static IntPtr CachedBrowserHwnd = IntPtr.Zero;
+        private static long SavedFrameStyle = 0;
+
+        private static string NormalizeDisplayMode(string mode)
+        {
+            if (mode == "borderless" || mode == "fullscreen") return mode;
+            return "windowed";
+        }
+
+        private static string NormalizeResolution(string res)
+        {
+            if (string.IsNullOrWhiteSpace(res) || res == "auto") return "auto";
+            int w, h;
+            if (TryParseResolution(res, out w, out h)) return w + "x" + h;
+            return "1340x880";
+        }
+
+        private static bool TryParseResolution(string res, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (string.IsNullOrWhiteSpace(res) || res == "auto") return false;
+            string[] parts = res.Trim().ToLowerInvariant().Split('x');
+            if (parts.Length != 2) return false;
+            if (!int.TryParse(parts[0], out width) || !int.TryParse(parts[1], out height)) return false;
+            if (width < 640 || height < 480 || width > 7680 || height > 4320) return false;
+            return true;
+        }
+
+        private static string ExtractJsonString(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            string marker = "\"" + key + "\"";
+            int keyIdx = json.IndexOf(marker, StringComparison.Ordinal);
+            if (keyIdx < 0) return null;
+            int colonIdx = json.IndexOf(':', keyIdx + marker.Length);
+            if (colonIdx < 0) return null;
+            int q1 = json.IndexOf('"', colonIdx + 1);
+            if (q1 < 0) return null;
+            int q2 = json.IndexOf('"', q1 + 1);
+            if (q2 < 0) return null;
+            return json.Substring(q1 + 1, q2 - q1 - 1);
+        }
+
+        private static DisplaySettings LoadDisplaySettings(string path)
+        {
+            var cfg = new DisplaySettings();
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string raw = File.ReadAllText(path, Encoding.UTF8);
+                    string mode = ExtractJsonString(raw, "displayMode");
+                    string res = ExtractJsonString(raw, "resolution");
+                    if (!string.IsNullOrEmpty(mode)) cfg.DisplayMode = NormalizeDisplayMode(mode);
+                    if (!string.IsNullOrEmpty(res)) cfg.Resolution = NormalizeResolution(res);
+                }
+            }
+            catch
+            {
+            }
+            return cfg;
+        }
+
+        private static void SaveDisplaySettings(string path, DisplaySettings cfg)
+        {
+            try
+            {
+                string json = string.Format(
+                    "{{\"displayMode\":\"{0}\",\"resolution\":\"{1}\"}}",
+                    NormalizeDisplayMode(cfg.DisplayMode),
+                    NormalizeResolution(cfg.Resolution)
+                );
+                File.WriteAllText(path, json, Encoding.UTF8);
+            }
+            catch
+            {
+            }
+        }
+
+        private static IntPtr FindBrowserWindowHandle(Process browserProc)
+        {
+            lock (WindowSync)
+            {
+                if (CachedBrowserHwnd != IntPtr.Zero && NativeWin.IsWindow(CachedBrowserHwnd) && NativeWin.IsWindowVisible(CachedBrowserHwnd))
+                {
+                    return CachedBrowserHwnd;
+                }
+
+                IntPtr byPid = IntPtr.Zero;
+                IntPtr byTitle = IntPtr.Zero;
+                int targetPid = browserProc != null ? browserProc.Id : -1;
+
+                NativeWin.EnumWindows((hWnd, lParam) =>
+                {
+                    if (!NativeWin.IsWindowVisible(hWnd)) return true;
+                    int len = NativeWin.GetWindowTextLength(hWnd);
+                    if (len <= 0) return true;
+                    var sb = new StringBuilder(len + 1);
+                    NativeWin.GetWindowText(hWnd, sb, sb.Capacity);
+                    string title = sb.ToString();
+
+                    uint winPid;
+                    NativeWin.GetWindowThreadProcessId(hWnd, out winPid);
+
+                    if (targetPid > 0 && winPid == (uint)targetPid && title.IndexOf("Tanques", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        byPid = hWnd;
+                        return false;
+                    }
+                    if (byTitle == IntPtr.Zero && title.IndexOf("Tanques", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        byTitle = hWnd;
+                    }
+                    return true;
+                }, IntPtr.Zero);
+
+                CachedBrowserHwnd = byPid != IntPtr.Zero ? byPid : byTitle;
+                return CachedBrowserHwnd;
+            }
+        }
+
+        private static bool ApplyDisplaySettingsToWindow(Process browserProc, DisplaySettings cfg)
+        {
+            IntPtr hwnd = FindBrowserWindowHandle(browserProc);
+            if (hwnd == IntPtr.Zero) return false;
+
+            lock (WindowSync)
+            {
+                long style = NativeWin.GetWindowLongPtr(hwnd, NativeWin.GWL_STYLE).ToInt64();
+                if (SavedFrameStyle == 0)
+                {
+                    SavedFrameStyle = style | NativeWin.WS_FRAME_BITS;
+                }
+
+                var screen = Screen.PrimaryScreen;
+                var bounds = screen.Bounds;
+                var work = screen.WorkingArea;
+
+                int reqW, reqH;
+                bool hasExplicitRes = TryParseResolution(cfg.Resolution, out reqW, out reqH);
+
+                if (cfg.DisplayMode == "borderless")
+                {
+                    NativeWin.ShowWindow(hwnd, NativeWin.SW_RESTORE);
+                    long borderlessStyle = style & ~NativeWin.WS_FRAME_BITS;
+                    NativeWin.SetWindowLongPtr(hwnd, NativeWin.GWL_STYLE, new IntPtr(borderlessStyle));
+
+                    int targetW = hasExplicitRes ? Math.Min(reqW, bounds.Width) : bounds.Width;
+                    int targetH = hasExplicitRes ? Math.Min(reqH, bounds.Height) : bounds.Height;
+                    int posX = bounds.X + Math.Max(0, (bounds.Width - targetW) / 2);
+                    int posY = bounds.Y + Math.Max(0, (bounds.Height - targetH) / 2);
+
+                    NativeWin.SetWindowPos(
+                        hwnd,
+                        IntPtr.Zero,
+                        posX,
+                        posY,
+                        targetW,
+                        targetH,
+                        NativeWin.SWP_FRAMECHANGED | NativeWin.SWP_NOZORDER | NativeWin.SWP_SHOWWINDOW | NativeWin.SWP_NOACTIVATE
+                    );
+                    return true;
+                }
+
+                if (cfg.DisplayMode == "windowed")
+                {
+                    NativeWin.ShowWindow(hwnd, NativeWin.SW_RESTORE);
+                    long windowedStyle = SavedFrameStyle != 0 ? SavedFrameStyle : (style | NativeWin.WS_FRAME_BITS);
+                    NativeWin.SetWindowLongPtr(hwnd, NativeWin.GWL_STYLE, new IntPtr(windowedStyle));
+
+                    int defW = hasExplicitRes ? reqW : 1340;
+                    int defH = hasExplicitRes ? reqH : 880;
+                    int targetW = Math.Min(defW, work.Width);
+                    int targetH = Math.Min(defH, work.Height);
+                    int posX = work.X + Math.Max(0, (work.Width - targetW) / 2);
+                    int posY = work.Y + Math.Max(0, (work.Height - targetH) / 2);
+
+                    NativeWin.SetWindowPos(
+                        hwnd,
+                        IntPtr.Zero,
+                        posX,
+                        posY,
+                        targetW,
+                        targetH,
+                        NativeWin.SWP_FRAMECHANGED | NativeWin.SWP_NOZORDER | NativeWin.SWP_SHOWWINDOW | NativeWin.SWP_NOACTIVATE
+                    );
+                    return true;
+                }
+
+                return true;
+            }
+        }
+
+        private static int StartWindowControlServer(string settingsPath, Func<Process> getBrowserProc, DisplaySettings currentCfg)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+            var thread = new Thread(() =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        using (TcpClient client = listener.AcceptTcpClient())
+                        using (NetworkStream stream = client.GetStream())
+                        {
+                            client.ReceiveTimeout = 1500;
+                            var buffer = new byte[4096];
+                            int read = stream.Read(buffer, 0, buffer.Length);
+                            if (read <= 0) continue;
+
+                            string raw = Encoding.UTF8.GetString(buffer, 0, read);
+                            int bodySplit = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                            string body = bodySplit >= 0 ? raw.Substring(bodySplit + 4) : "";
+
+                            if (raw.StartsWith("POST /apply", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string mode = ExtractJsonString(body, "displayMode");
+                                string res = ExtractJsonString(body, "resolution");
+                                if (!string.IsNullOrEmpty(mode)) currentCfg.DisplayMode = NormalizeDisplayMode(mode);
+                                if (!string.IsNullOrEmpty(res)) currentCfg.Resolution = NormalizeResolution(res);
+                                SaveDisplaySettings(settingsPath, currentCfg);
+                                bool applied = ApplyDisplaySettingsToWindow(getBrowserProc(), currentCfg);
+                                string respBody = string.Format(
+                                    "{{\"ok\":true,\"nativeWindow\":true,\"applied\":{0},\"displayMode\":\"{1}\",\"resolution\":\"{2}\"}}",
+                                    applied ? "true" : "false",
+                                    currentCfg.DisplayMode,
+                                    currentCfg.Resolution
+                                );
+                                WriteHttpJson(stream, respBody);
+                            }
+                            else
+                            {
+                                string respBody = string.Format(
+                                    "{{\"ok\":true,\"nativeWindow\":true,\"displayMode\":\"{0}\",\"resolution\":\"{1}\"}}",
+                                    currentCfg.DisplayMode,
+                                    currentCfg.Resolution
+                                );
+                                WriteHttpJson(stream, respBody);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            });
+            thread.IsBackground = true;
+            thread.Start();
+            return port;
+        }
+
+        private static void WriteHttpJson(NetworkStream stream, string json)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(json);
+            string header =
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: application/json; charset=utf-8\r\n" +
+                "Content-Length: " + payload.Length + "\r\n" +
+                "Connection: close\r\n\r\n";
+            byte[] headerBytes = Encoding.ASCII.GetBytes(header);
+            stream.Write(headerBytes, 0, headerBytes.Length);
+            stream.Write(payload, 0, payload.Length);
+        }
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -95,6 +413,11 @@ namespace TanquesTacticosLauncher
                     AppFolderName
                 );
                 string appDir = EnsurePayloadExtracted(Path.Combine(baseDataDir, "app"));
+                string displaySettingsPath = Path.Combine(baseDataDir, "display-settings.json");
+                DisplaySettings displayCfg = LoadDisplaySettings(displaySettingsPath);
+                Process browserProc = null;
+                int windowBridgePort = StartWindowControlServer(displaySettingsPath, () => browserProc, displayCfg);
+
                 string nodeExe = Path.Combine(appDir, "node.exe");
                 string serverJs = Path.Combine(appDir, "server.js");
 
@@ -115,6 +438,7 @@ namespace TanquesTacticosLauncher
                     WindowStyle = ProcessWindowStyle.Hidden
                 };
                 serverPsi.EnvironmentVariables["PORT"] = port.ToString();
+                serverPsi.EnvironmentVariables["TANQUES_WINDOW_API"] = "http://127.0.0.1:" + windowBridgePort + "/";
 
                 Process serverProc = Process.Start(serverPsi);
                 if (serverProc == null)
@@ -141,20 +465,42 @@ namespace TanquesTacticosLauncher
                 }
 
                 string browserExe = FindChromiumBrowser();
-                Process browserProc = null;
 
                 if (!string.IsNullOrEmpty(browserExe))
                 {
                     string profileDir = Path.Combine(baseDataDir, "BrowserProfile");
                     Directory.CreateDirectory(profileDir);
 
+                    var work = Screen.PrimaryScreen.WorkingArea;
+                    var bounds = Screen.PrimaryScreen.Bounds;
+                    int launchW, launchH;
+                    if (displayCfg.DisplayMode == "borderless" && displayCfg.Resolution == "auto")
+                    {
+                        launchW = bounds.Width;
+                        launchH = bounds.Height;
+                    }
+                    else if (!TryParseResolution(displayCfg.Resolution, out launchW, out launchH))
+                    {
+                        launchW = Math.Min(1340, work.Width);
+                        launchH = Math.Min(880, work.Height);
+                    }
+                    else
+                    {
+                        launchW = Math.Min(launchW, bounds.Width);
+                        launchH = Math.Min(launchH, bounds.Height);
+                    }
+
+                    string fsFlag = displayCfg.DisplayMode == "fullscreen" ? " --start-fullscreen" : "";
                     var browserPsi = new ProcessStartInfo
                     {
                         FileName = browserExe,
                         Arguments = string.Format(
-                            "--app={0} --user-data-dir=\"{1}\" --new-window --window-size=1340,880 --no-first-run --no-default-browser-check",
+                            "--app={0} --user-data-dir=\"{1}\" --new-window --window-size={2},{3}{4} --no-first-run --no-default-browser-check",
                             baseUrl,
-                            profileDir
+                            profileDir,
+                            launchW,
+                            launchH,
+                            fsFlag
                         ),
                         UseShellExecute = false
                     };
@@ -163,6 +509,20 @@ namespace TanquesTacticosLauncher
                     browserProc = Process.Start(browserPsi);
                     if (browserProc != null)
                     {
+                        if (displayCfg.DisplayMode == "borderless" || displayCfg.DisplayMode == "windowed")
+                        {
+                            var applyThread = new Thread(() =>
+                            {
+                                for (int attempt = 0; attempt < 50; attempt++)
+                                {
+                                    if (ApplyDisplaySettingsToWindow(browserProc, displayCfg)) break;
+                                    Thread.Sleep(120);
+                                }
+                            });
+                            applyThread.IsBackground = true;
+                            applyThread.Start();
+                        }
+
                         while (!serverProc.HasExited && !browserProc.HasExited)
                         {
                             Thread.Sleep(150);

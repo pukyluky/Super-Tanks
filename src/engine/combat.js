@@ -9,6 +9,7 @@ const { SPECIAL2_CATALOG } = require('../data/specials2');
 const {
   intersectRayAABB,
   raycastWallDDA,
+  tracePiercingRay,
   findClosestTankHit,
   findNearestEmptyPoint,
   computeOutgoingDamage,
@@ -499,48 +500,45 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
   } else if (shooter.turretId === 'piercing') {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    let curX = ox;
-    let curY = oy;
-    let power = turret.piercePower;
-    const hitTankIds = new Set([shooter.id]);
-    let endX = ox;
-    let endY = oy;
+    const maxWalls = turret.maxWallPierce ?? 1;
+    const ray = tracePiercingRay(game.grid, ox, oy, dx, dy, 180, maxWalls);
 
-    for (let step = 0; step < 30 && power > 0; step++) {
-      const wallHit = raycastWallDDA(game.grid, curX, curY, dx, dy, 170);
-
-      const segmentTanks = [];
-      for (const tank of game.tanks) {
-        if (!tank.alive || hitTankIds.has(tank.id)) continue;
-        const t = intersectRayAABB(curX, curY, dx, dy, tank.x, tank.y, TANK_SIZE, TANK_SIZE);
-        if (t !== null && t <= wallHit.t) {
-          segmentTanks.push({ tank, t, x: curX + dx * t, y: curY + dy * t });
-        }
+    const lineHits = [];
+    for (const tank of game.tanks) {
+      if (!tank.alive || tank.id === shooter.id) continue;
+      const t = intersectRayAABB(ox, oy, dx, dy, tank.x, tank.y, TANK_SIZE, TANK_SIZE);
+      if (t !== null && t <= ray.finalT) {
+        lineHits.push({ kind: 'tank', tank, t, x: ox + dx * t, y: oy + dy * t });
       }
-      segmentTanks.sort((a, b) => a.t - b.t);
-      for (const st of segmentTanks) {
-        hitTankIds.add(st.tank.id);
-        recordTankDirectHit(st.tank, turret.specialDamage, st.x, st.y);
-        events.explosions.push({ x: st.x, y: st.y, radius: 1.8, kind: 'piercing' });
+    }
+    for (const dep of game.deployables || []) {
+      if (dep.hp <= 0 || dep.id === shooter.id) continue;
+      const t = intersectRayAABB(ox, oy, dx, dy, dep.x, dep.y, dep.size, dep.size);
+      if (t !== null && t <= ray.finalT) {
+        lineHits.push({ kind: 'deployable', deployable: dep, t, x: ox + dx * t, y: oy + dy * t });
       }
-
-      endX = wallHit.x;
-      endY = wallHit.y;
-
-      if (!wallHit.hit || wallHit.cellVal === CELL_STEEL) {
-        events.explosions.push({ x: wallHit.x, y: wallHit.y, radius: 1.6, kind: 'piercing' });
-        break;
-      }
-
-      mergeCellChanges(applyRadialWallDamage(game.grid, wallHit.x, wallHit.y, turret.specialRadius, 3, 0.5));
-      events.explosions.push({ x: wallHit.x, y: wallHit.y, radius: 1.4, kind: 'piercing' });
-      power--;
-      curX = wallHit.x + dx * 0.9;
-      curY = wallHit.y + dy * 0.9;
-      if (curX < 1 || curX >= GRID_W - 1 || curY < 1 || curY >= GRID_H - 1) break;
+    }
+    lineHits.sort((a, b) => a.t - b.t);
+    for (const target of lineHits) {
+      recordTargetHit(target, turret.specialDamage, target.x, target.y);
+      events.explosions.push({ x: target.x, y: target.y, radius: 1.8, kind: 'piercing' });
     }
 
-    events.traces.push({ x1: ox, y1: oy, x2: endX, y2: endY, kind: 'piercing' });
+    for (const imp of ray.wallImpacts) {
+      if (imp.kind === 'stop') {
+        mergeCellChanges(applyRadialWallDamage(game.grid, imp.x, imp.y, turret.specialRadius, 2, 0.6));
+        events.explosions.push({ x: imp.x, y: imp.y, radius: 1.6, kind: 'piercing' });
+      } else {
+        mergeCellChanges(applyRadialWallDamage(game.grid, imp.x, imp.y, turret.specialRadius, 3, 0.5));
+        events.explosions.push({ x: imp.x, y: imp.y, radius: 1.4, kind: 'piercing' });
+      }
+    }
+
+    if (ray.stopReason === 'steel') {
+      events.explosions.push({ x: ray.endX, y: ray.endY, radius: 1.6, kind: 'piercing' });
+    }
+
+    events.traces.push({ x1: ox, y1: oy, x2: ray.endX, y2: ray.endY, kind: 'piercing' });
   } else if (shooter.turretId === 'builder') {
     const reqDist = Math.hypot((targetX ?? ox + Math.cos(angle) * 20) - ox, (targetY ?? oy + Math.sin(angle) * 20) - oy);
     const clampedDist = Math.max(6, Math.min(turret.range, reqDist));

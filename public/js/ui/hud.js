@@ -1,5 +1,5 @@
 import { CELL_PX } from '../constants.js';
-import { state, getMyTeamId, isMyTurn, canvas, dom, showToast, saveSettings } from '../state.js';
+import { state, getMyTeamId, isMyTurn, isAndroidPlatform, canvas, dom, showToast, saveSettings, syncViewportClasses } from '../state.js';
 
 let battleSendWs = null;
 
@@ -778,8 +778,97 @@ function formatSensitivityLabel(sens) {
 export function initSettingsUI() {
   if (!dom.settingsOverlay) return;
 
+  let hasNativeWindow = false;
+  let suppressFsEvent = false;
+  let userEditedDisplay = false;
+
+  const parseRes = (res) => {
+    if (!res || res === 'auto') return null;
+    const m = /^(\d{3,4})x(\d{3,4})$/.exec(res);
+    if (!m) return null;
+    return { w: Number(m[1]), h: Number(m[2]) };
+  };
+
+  const updateViewportFraming = () => {
+    if (isAndroidPlatform()) {
+      document.body.classList.remove('pc-viewport-framed');
+      return;
+    }
+    const { displayMode, resolution } = state.settings;
+    const dims = parseRes(resolution);
+    const shouldFrameCss =
+      !hasNativeWindow &&
+      displayMode !== 'fullscreen' &&
+      dims &&
+      !document.fullscreenElement &&
+      window.innerWidth > dims.w + 48;
+
+    if (shouldFrameCss) {
+      document.documentElement.style.setProperty('--pc-target-w', `${dims.w}px`);
+      document.documentElement.style.setProperty('--pc-target-h', `${dims.h}px`);
+      document.body.classList.add('pc-viewport-framed');
+    } else {
+      document.documentElement.style.removeProperty('--pc-target-w');
+      document.documentElement.style.removeProperty('--pc-target-h');
+      document.body.classList.remove('pc-viewport-framed');
+    }
+  };
+
+  const applyPcDisplaySettings = async (fromGesture) => {
+    if (isAndroidPlatform()) return;
+    const { displayMode, resolution } = state.settings;
+
+    if (displayMode === 'fullscreen') {
+      document.body.classList.remove('pc-viewport-framed');
+      if (fromGesture && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+        suppressFsEvent = true;
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (_) {}
+        suppressFsEvent = false;
+      }
+    } else if (document.fullscreenElement && document.exitFullscreen) {
+      suppressFsEvent = true;
+      try {
+        await document.exitFullscreen();
+      } catch (_) {}
+      suppressFsEvent = false;
+    }
+
+    try {
+      const resp = await fetch('/api/display-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayMode, resolution })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        hasNativeWindow = Boolean(data?.nativeWindow);
+      }
+    } catch (_) {}
+
+    if (!hasNativeWindow && displayMode !== 'fullscreen') {
+      const dims = parseRes(resolution);
+      const targetW = dims ? dims.w : 1340;
+      const targetH = dims ? dims.h : 880;
+      try {
+        if (typeof window.resizeTo === 'function') {
+          window.resizeTo(targetW, targetH);
+        }
+      } catch (_) {}
+      if (displayMode === 'borderless' && fromGesture) {
+        showToast('En navegador usa TanquesTacticos2D.exe para ventana sin bordes real o Pantalla completa.');
+      }
+    }
+
+    setTimeout(() => {
+      updateViewportFraming();
+      syncViewportClasses();
+    }, 80);
+  };
+
   const syncSettingsModal = () => {
-    const { controlType, sensitivity } = state.settings;
+    const { controlType, sensitivity, displayMode, resolution } = state.settings;
     if (dom.settingsControlOptions) {
       dom.settingsControlOptions.querySelectorAll('[data-control-type]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.controlType === controlType);
@@ -796,6 +885,24 @@ export function initSettingsUI() {
       dom.settingsSensitivityPresets.querySelectorAll('[data-sens]').forEach((btn) => {
         btn.classList.toggle('active', Number(btn.dataset.sens) === pct);
       });
+    }
+    if (dom.settingsDisplayModeOptions) {
+      dom.settingsDisplayModeOptions.querySelectorAll('[data-display-mode]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.displayMode === displayMode);
+      });
+    }
+    if (dom.settingsResolutionSelect) {
+      dom.settingsResolutionSelect.value = resolution || '1340x880';
+      dom.settingsResolutionSelect.disabled = displayMode === 'fullscreen';
+    }
+    if (dom.settingsDisplayHint) {
+      if (displayMode === 'fullscreen') {
+        dom.settingsDisplayHint.textContent = 'Modo Pantalla completa activo (pulsa Esc o elige Ventana para volver).';
+      } else if (displayMode === 'borderless') {
+        dom.settingsDisplayHint.textContent = 'Ventana sin bordes: elige "Automática" para cubrir todo el monitor o una resolución centrada.';
+      } else {
+        dom.settingsDisplayHint.textContent = 'Modo Ventana: selecciona la resolución exacta de la ventana del juego.';
+      }
     }
   };
 
@@ -847,13 +954,74 @@ export function initSettingsUI() {
     });
   }
 
+  if (dom.settingsDisplayModeOptions) {
+    dom.settingsDisplayModeOptions.querySelectorAll('[data-display-mode]').forEach((btn) => {
+      btn.onclick = () => {
+        userEditedDisplay = true;
+        const mode = btn.dataset.displayMode;
+        state.settings.displayMode = ['windowed', 'borderless', 'fullscreen'].includes(mode)
+          ? mode
+          : 'windowed';
+        saveSettings();
+        syncSettingsModal();
+        applyPcDisplaySettings(true);
+      };
+    });
+  }
+
+  if (dom.settingsResolutionSelect) {
+    dom.settingsResolutionSelect.addEventListener('change', () => {
+      userEditedDisplay = true;
+      state.settings.resolution = dom.settingsResolutionSelect.value || '1340x880';
+      saveSettings();
+      syncSettingsModal();
+      applyPcDisplaySettings(true);
+    });
+  }
+
   if (dom.settingsResetBtn) {
     dom.settingsResetBtn.onclick = () => {
-      state.settings.controlType = 'joystick';
-      state.settings.sensitivity = 1.0;
+      if (isAndroidPlatform()) {
+        state.settings.controlType = 'joystick';
+        state.settings.sensitivity = 1.0;
+      } else {
+        userEditedDisplay = true;
+        state.settings.displayMode = 'windowed';
+        state.settings.resolution = '1340x880';
+        applyPcDisplaySettings(true);
+      }
       saveSettings();
       syncSettingsModal();
     };
+  }
+
+  if (!isAndroidPlatform()) {
+    document.addEventListener('fullscreenchange', () => {
+      if (suppressFsEvent) return;
+      if (!document.fullscreenElement && state.settings.displayMode === 'fullscreen') {
+        userEditedDisplay = true;
+        state.settings.displayMode = 'windowed';
+        saveSettings();
+        syncSettingsModal();
+        applyPcDisplaySettings(false);
+      }
+    });
+
+    fetch('/api/display-settings')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((info) => {
+        if (!info || userEditedDisplay) return;
+        hasNativeWindow = Boolean(info.nativeWindow);
+        if (hasNativeWindow && ['windowed', 'borderless', 'fullscreen'].includes(info.displayMode)) {
+          state.settings.displayMode = info.displayMode;
+          if (info.resolution) state.settings.resolution = info.resolution;
+          saveSettings();
+          syncSettingsModal();
+        } else {
+          updateViewportFraming();
+        }
+      })
+      .catch(() => {});
   }
 
   syncSettingsModal();

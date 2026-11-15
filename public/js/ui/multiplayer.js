@@ -9,6 +9,95 @@ let closeRemoteAdhocFn = null;
 let resetBattleEffectsFn = null;
 let lastHostOffer = null;
 let legacyMapSeed = null;
+let adhocDiscoveryTimer = null;
+
+function requestAdhocDiscovery() {
+  if (!sendLocalWsFn || !state.ws || state.ws.readyState !== 1) return;
+  sendLocalWsFn({ type: 'discover_adhoc_hosts' });
+}
+
+function stopAdhocDiscoveryPolling() {
+  if (adhocDiscoveryTimer) {
+    clearInterval(adhocDiscoveryTimer);
+    adhocDiscoveryTimer = null;
+  }
+}
+
+function startAdhocDiscoveryPolling() {
+  stopAdhocDiscoveryPolling();
+  requestAdhocDiscovery();
+  adhocDiscoveryTimer = setInterval(() => {
+    const inHangar = !dom.hangarScreen || !dom.hangarScreen.classList.contains('hidden');
+    const guestVisible = dom.adhocGuestPane && !dom.adhocGuestPane.classList.contains('hidden');
+    if (!inHangar || state.syncMode !== 'pvp_adhoc' || !guestVisible) {
+      stopAdhocDiscoveryPolling();
+      return;
+    }
+    requestAdhocDiscovery();
+  }, 1200);
+}
+
+function getHostKey(host) {
+  return `${host?.id || ''}@${host?.addr || ''}`;
+}
+
+function renderAdhocRoomList() {
+  const listEl = dom.adhocRoomList;
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  const hosts = Array.isArray(state.discoveredAdhocHosts) ? state.discoveredAdhocHosts : [];
+  if (hosts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'mp-room-empty';
+    empty.textContent = 'Buscando puntos de conexión en la red local / Hotspot...';
+    listEl.appendChild(empty);
+    state.selectedAdhocHostKey = null;
+    return;
+  }
+
+  const stillExists = hosts.some((h) => getHostKey(h) === state.selectedAdhocHostKey);
+  if (!stillExists) {
+    state.selectedAdhocHostKey = getHostKey(hosts[0]);
+  }
+
+  for (const host of hosts) {
+    const key = getHostKey(host);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mp-room-item' + (key === state.selectedAdhocHostKey ? ' active' : '');
+
+    const main = document.createElement('div');
+    main.className = 'mp-room-main';
+
+    const ssidEl = document.createElement('span');
+    ssidEl.className = 'mp-room-ssid';
+    ssidEl.textContent = host.ssid || 'Tanques-AP';
+
+    const metaEl = document.createElement('span');
+    metaEl.className = 'mp-room-meta';
+    metaEl.textContent = `${host.tankName || 'Tanque'} · ${host.mapStyle || 'campo'} · ${host.addr}`;
+
+    main.appendChild(ssidEl);
+    main.appendChild(metaEl);
+
+    const badge = document.createElement('span');
+    badge.className = 'mp-room-badge';
+    badge.textContent = (host.platform || 'LAN').toUpperCase();
+
+    btn.appendChild(main);
+    btn.appendChild(badge);
+    btn.onclick = () => {
+      state.selectedAdhocHostKey = key;
+      renderAdhocRoomList();
+      if (dom.adhocGuestStatus) {
+        dom.adhocGuestStatus.textContent = `Seleccionado: ${host.ssid} (${host.addr}). Introduce la contraseña.`;
+      }
+      dom.adhocJoinCode?.focus();
+    };
+    listEl.appendChild(btn);
+  }
+}
 
 function setLed(name, active) {
   const map = {
@@ -59,22 +148,37 @@ export function applySyncModeUI(mode) {
     const hideStart = mode !== 'pve' || (isMobileUi() && state.hangarStep !== 4);
     dom.startBtn.classList.toggle('hidden', hideStart);
   }
+  if (mode === 'pvp_adhoc' && dom.adhocGuestPane && !dom.adhocGuestPane.classList.contains('hidden')) {
+    startAdhocDiscoveryPolling();
+  } else {
+    stopAdhocDiscoveryPolling();
+  }
   updateWizardChrome();
 }
 
 export function handleAdhocServerMessage(msg) {
   if (msg.type === 'adhoc_room_created') {
     state.adhocRoomCode = msg.code;
-    dom.adhocRoomCode.textContent = msg.code;
+    state.adhocRoomSsid = msg.ssid || `Tanques-${msg.code}`;
+    if (dom.adhocRoomCode) dom.adhocRoomCode.textContent = msg.code;
+    if (dom.adhocRoomSsid) dom.adhocRoomSsid.textContent = state.adhocRoomSsid;
     dom.adhocRoomWait?.classList.remove('hidden');
     dom.adhocCancelBtn?.classList.remove('hidden');
-    dom.adhocCreateBtn.disabled = true;
+    if (dom.adhocCreateBtn) dom.adhocCreateBtn.disabled = true;
+    stopAdhocDiscoveryPolling();
+    return true;
+  }
+
+  if (msg.type === 'adhoc_hosts') {
+    state.discoveredAdhocHosts = Array.isArray(msg.hosts) ? msg.hosts : [];
+    renderAdhocRoomList();
     return true;
   }
 
   if (msg.type === 'adhoc_room_joined') {
     state.adhocRoomCode = msg.code;
     state.myTeam = msg.myTeam;
+    stopAdhocDiscoveryPolling();
     if (resetBattleEffectsFn) resetBattleEffectsFn();
     return true;
   }
@@ -87,15 +191,19 @@ export function handleAdhocServerMessage(msg) {
 
   if (msg.type === 'adhoc_peer_left' || msg.type === 'adhoc_left') {
     state.adhocRoomCode = null;
+    state.adhocRoomSsid = null;
     dom.adhocRoomWait?.classList.add('hidden');
     dom.adhocCancelBtn?.classList.add('hidden');
-    dom.adhocCreateBtn.disabled = false;
+    if (dom.adhocCreateBtn) dom.adhocCreateBtn.disabled = false;
     if (msg.message) showToast(msg.message);
     if (!dom.battleScreen.classList.contains('hidden')) {
       dom.gameoverOverlay.classList.add('hidden');
       dom.battleScreen.classList.add('hidden');
       dom.hangarScreen.classList.remove('hidden');
       if (closeRemoteAdhocFn) closeRemoteAdhocFn();
+    }
+    if (state.syncMode === 'pvp_adhoc' && dom.adhocGuestPane && !dom.adhocGuestPane.classList.contains('hidden')) {
+      startAdhocDiscoveryPolling();
     }
     return true;
   }
@@ -215,12 +323,14 @@ export async function requestLegacyRematch() {
 }
 
 export function resetMultiplayerOnHangarReturn() {
+  stopAdhocDiscoveryPolling();
   if (state.adhocRoomCode) {
     const sock = (state.adhocWs && state.adhocWs.readyState === 1) ? state.adhocWs : state.ws;
     if (sock && sock.readyState === 1) {
       sock.send(JSON.stringify({ type: 'leave_adhoc_room' }));
     }
     state.adhocRoomCode = null;
+    state.adhocRoomSsid = null;
   }
   if (closeRemoteAdhocFn) closeRemoteAdhocFn();
   if (legacyModem && state.gameMode === 'pvp_legacy') {
@@ -250,16 +360,38 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
     dom.adhocTabGuest?.classList.toggle('active', !isHost);
     dom.adhocHostPane?.classList.toggle('hidden', !isHost);
     dom.adhocGuestPane?.classList.toggle('hidden', isHost);
+    if (!isHost && state.syncMode === 'pvp_adhoc') {
+      startAdhocDiscoveryPolling();
+    } else {
+      stopAdhocDiscoveryPolling();
+    }
   };
   if (dom.adhocTabHost) dom.adhocTabHost.onclick = () => switchAdhocPane(true);
   if (dom.adhocTabGuest) dom.adhocTabGuest.onclick = () => switchAdhocPane(false);
 
+  if (dom.adhocRefreshBtn) {
+    dom.adhocRefreshBtn.onclick = () => {
+      requestAdhocDiscovery();
+      setTimeout(requestAdhocDiscovery, 200);
+      showToast('Escaneando puntos de conexión...');
+    };
+  }
+  renderAdhocRoomList();
+
   if (dom.adhocCreateBtn) {
     dom.adhocCreateBtn.onclick = () => {
+      if (!state.ws || state.ws.readyState !== 1) {
+        showToast('Esperando conexión con el servidor local...');
+        return;
+      }
       if (closeRemoteAdhocFn) closeRemoteAdhocFn();
       state.myTeam = 'player1';
+      const selectedTank = state.catalog?.tankTypes?.[state.selectedTankType];
+      const customSsid = (dom.adhocSsidInput?.value || '').trim();
       sendLocalWsFn({
         type: 'create_adhoc_room',
+        ssid: customSsid || undefined,
+        tankName: selectedTank?.name || state.selectedTankType,
         tankTypeId: state.selectedTankType,
         armorId: state.selectedArmor,
         mapStyle: state.selectedMap
@@ -271,9 +403,10 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
     dom.adhocCancelBtn.onclick = () => {
       sendLocalWsFn({ type: 'leave_adhoc_room' });
       state.adhocRoomCode = null;
+      state.adhocRoomSsid = null;
       dom.adhocRoomWait?.classList.add('hidden');
       dom.adhocCancelBtn?.classList.add('hidden');
-      dom.adhocCreateBtn.disabled = false;
+      if (dom.adhocCreateBtn) dom.adhocCreateBtn.disabled = false;
     };
   }
 
@@ -283,10 +416,11 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
       const primary = info.lanIps && info.lanIps.length > 0
         ? `${info.lanIps[0]}:${info.port}`
         : location.host;
-      const text = `${primary} | Código: ${state.adhocRoomCode || ''}`;
+      const ssidLabel = state.adhocRoomSsid || `Tanques-${state.adhocRoomCode || ''}`;
+      const text = `Red: ${ssidLabel} | Contraseña: ${state.adhocRoomCode || ''} | ${primary}`;
       try {
         await navigator.clipboard.writeText(text);
-        showToast('IP y código copiados al portapapeles.');
+        showToast('Red y contraseña copiadas al portapapeles.');
       } catch (_) {
         showToast(text);
       }
@@ -295,17 +429,27 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
 
   if (dom.adhocJoinBtn) {
     dom.adhocJoinBtn.onclick = () => {
-      const parsed = normalizeAdhocAddress(dom.adhocJoinAddr?.value || '');
+      const manualRaw = (dom.adhocJoinAddr?.value || '').trim();
+      const parsed = normalizeAdhocAddress(manualRaw);
       if (parsed.extractedCode && dom.adhocJoinCode && !dom.adhocJoinCode.value.trim()) {
         dom.adhocJoinCode.value = parsed.extractedCode;
       }
-      if (parsed.hostPort && dom.adhocJoinAddr && dom.adhocJoinAddr.value.trim()) {
+      if (parsed.hostPort && dom.adhocJoinAddr && manualRaw) {
         dom.adhocJoinAddr.value = parsed.hostPort;
       }
-      const targetAddr = parsed.hostPort || location.host;
+
+      const hosts = Array.isArray(state.discoveredAdhocHosts) ? state.discoveredAdhocHosts : [];
+      const selectedHost = hosts.find((h) => getHostKey(h) === state.selectedAdhocHostKey) || hosts[0] || null;
+      const targetAddr = parsed.hostPort || selectedHost?.addr || '';
+      if (!targetAddr) {
+        showToast('Selecciona un punto de conexión de la lista o usa IP:Puerto manual.');
+        return;
+      }
+
       const code = (dom.adhocJoinCode?.value || parsed.extractedCode || '').trim().toUpperCase();
       if (!code) {
-        showToast('Introduce el código de sala del Host.');
+        showToast('Introduce la contraseña (código del Host) para conectarte.');
+        dom.adhocJoinCode?.focus();
         return;
       }
       const joinPayload = {
@@ -319,7 +463,8 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
         sendLocalWsFn(joinPayload);
         return;
       }
-      if (dom.adhocGuestStatus) dom.adhocGuestStatus.textContent = `Conectando con ${targetAddr}...`;
+      const label = selectedHost ? `${selectedHost.ssid} (${targetAddr})` : targetAddr;
+      if (dom.adhocGuestStatus) dom.adhocGuestStatus.textContent = `Conectando con ${label}...`;
       connectRemoteAdhocFn(targetAddr, joinPayload);
     };
   }

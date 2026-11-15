@@ -25,7 +25,8 @@ function attachWebSocketSession(req, socket, {
   shutdownServer,
   onWsConnected,
   onWsDisconnected,
-  getHostInfo
+  getHostInfo,
+  adhocDiscovery
 }) {
   const key = req.headers['sec-websocket-key'];
   if (!key) {
@@ -68,8 +69,17 @@ function attachWebSocketSession(req, socket, {
     sendJson
   };
 
+  let hostedAdhocCode = null;
+  const stopHostedBroadcastIfOwner = () => {
+    if (hostedAdhocCode) {
+      hostedAdhocCode = null;
+      if (adhocDiscovery) adhocDiscovery.stopAdvertising();
+    }
+  };
+
   const cleanupSocket = () => {
     connected = false;
+    stopHostedBroadcastIfOwner();
     leaveAdhocRoom(member);
     if (activeWsSockets.delete(socket)) {
       if (onWsDisconnected) onWsDisconnected();
@@ -118,19 +128,44 @@ function attachWebSocketSession(req, socket, {
 
     if (msg.type === 'create_adhoc_room') {
       game = null;
-      createAdhocRoom(msg, member);
+      const room = createAdhocRoom(msg, member);
+      if (room && adhocDiscovery) {
+        hostedAdhocCode = room.code;
+        const tankMeta = TANK_TYPES_CATALOG[msg.tankTypeId];
+        adhocDiscovery.startAdvertising({
+          ssid: room.ssid,
+          mapStyle: room.mapStyle,
+          tankName: (tankMeta && tankMeta.name) || msg.tankTypeId || 'Tanque'
+        });
+      }
       return;
     }
 
     if (msg.type === 'join_adhoc_room') {
       game = null;
-      joinAdhocRoom(msg, member);
+      stopHostedBroadcastIfOwner();
+      const joinedRoom = joinAdhocRoom(msg, member);
+      if (joinedRoom && adhocDiscovery) {
+        adhocDiscovery.stopAdvertising();
+      }
       return;
     }
 
     if (msg.type === 'leave_adhoc_room') {
+      stopHostedBroadcastIfOwner();
       leaveAdhocRoom(member, 'Has salido de la sala Ad-Hoc.');
       sendJson({ type: 'adhoc_left' });
+      return;
+    }
+
+    if (msg.type === 'discover_adhoc_hosts') {
+      if (adhocDiscovery && typeof adhocDiscovery.sendProbe === 'function') {
+        adhocDiscovery.sendProbe();
+      }
+      sendJson({
+        type: 'adhoc_hosts',
+        hosts: adhocDiscovery ? adhocDiscovery.getDiscoveredHosts() : []
+      });
       return;
     }
 

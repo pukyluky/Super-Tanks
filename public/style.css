@@ -801,6 +801,97 @@ button {
   letter-spacing: 2px;
 }
 
+.mp-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mp-room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 156px;
+  overflow-y: auto;
+}
+
+.mp-room-empty {
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.mp-room-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: #0d1422;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.mp-room-item:hover {
+  border-color: var(--primary);
+}
+
+.mp-room-item.active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.mp-room-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mp-room-ssid {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e0f2fe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-room-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mp-room-badge {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.mp-manual-box {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mp-manual-box summary {
+  cursor: pointer;
+  user-select: none;
+}
+
 .modem-box {
   border-color: #2f4b38;
   background: #07110b;
@@ -1666,7 +1757,7 @@ body[data-control-type="dpad"] .mobile-dpad {
 
 .settings-card {
   width: 100%;
-  max-width: 500px;
+  max-width: 560px;
   max-height: 92dvh;
   overflow-y: auto;
   text-align: left;
@@ -1693,10 +1784,53 @@ body[data-control-type="dpad"] .mobile-dpad {
   margin-bottom: 14px;
 }
 
+.settings-section .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+body.pc-platform .android-only-setting {
+  display: none !important;
+}
+
+body.android-platform .pc-only-setting {
+  display: none !important;
+}
+
 .settings-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.settings-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-select {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+body.pc-viewport-framed .screen {
+  max-width: var(--pc-target-w, 100vw);
+  max-height: var(--pc-target-h, 100vh);
+  min-height: 0;
+  height: var(--pc-target-h, 100vh);
+  margin: auto;
 }
 
 .settings-slider-head {
@@ -1757,7 +1891,8 @@ body[data-control-type="dpad"] .mobile-dpad {
     grid-template-columns: 1fr;
   }
 
-  .settings-choice-grid {
+  .settings-choice-grid,
+  .settings-mode-grid {
     grid-template-columns: 1fr;
   }
 }
