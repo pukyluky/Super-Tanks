@@ -2,6 +2,14 @@ import { state, dom, showToast, isMobileUi } from '../state.js';
 import { legacyModem } from '../net/modemAudio.js';
 import { normalizeAdhocAddress } from '../net/wsClient.js';
 import { updateWizardChrome } from './hangar.js';
+import { drawTankChassis, drawTankTurret } from '../assets/tankSprites.js';
+
+const LOBBY_MAP_NAMES = {
+  bunkers: 'Búnkeres',
+  labyrinth: 'Laberinto',
+  open: 'Campo Abierto',
+  random: '🎲 Aleatorio'
+};
 
 let sendLocalWsFn = null;
 let connectRemoteAdhocFn = null;
@@ -39,6 +47,160 @@ function startAdhocDiscoveryPolling() {
 
 function getHostKey(host) {
   return `${host?.id || ''}@${host?.addr || ''}`;
+}
+
+function sendAdhocRoomMsg(payload) {
+  if (state.adhocWs && state.adhocWs.readyState === 1) {
+    state.adhocWs.send(JSON.stringify(payload));
+    return;
+  }
+  if (sendLocalWsFn) sendLocalWsFn(payload);
+}
+
+function emitAdhocLobbyUpdate() {
+  const isHost = state.myTeam === 'player1';
+  const payload = {
+    type: 'adhoc_lobby_update',
+    tankTypeId: state.selectedTankType,
+    armorId: state.selectedArmor
+  };
+  if (isHost) {
+    payload.mapStyle = state.selectedMap;
+  }
+  sendAdhocRoomMsg(payload);
+}
+
+function formatLobbySelection(sel) {
+  if (!sel || !state.catalog) return 'Conectando...';
+  const tt = state.catalog.tankTypes?.[sel.tankTypeId];
+  const ar = state.catalog.armors?.[sel.armorId];
+  const tName = tt ? tt.name : sel.tankTypeId;
+  const aName = ar ? `${ar.name.replace('Blindaje ', '')} (${ar.maxHp} PV)` : sel.armorId;
+  return `${tName} • ${aName}`;
+}
+
+function renderAdhocLobby() {
+  const lobby = state.adhocLobby;
+  const cat = state.catalog;
+  if (!lobby || !cat || !dom.adhocLobbyScreen) return;
+
+  const isHost = state.myTeam === 'player1';
+  if (dom.lobbyRoleBadge) {
+    dom.lobbyRoleBadge.textContent = isHost ? 'PVP AD-HOC • ANFITRIÓN' : 'PVP AD-HOC • INVITADO';
+  }
+  if (dom.lobbyRoomTitle) {
+    dom.lobbyRoomTitle.textContent = `Antesala: ${lobby.ssid || 'Sala Ad-Hoc'} (${lobby.code || ''})`;
+  }
+  if (dom.lobbySubtitle) {
+    dom.lobbySubtitle.textContent = isHost
+      ? 'Escoge tu tanque, blindaje y la arena de combate para iniciar la partida.'
+      : 'Escoge tu tanque y blindaje mientras el anfitrión elige la arena e inicia el combate.';
+  }
+  if (dom.lobbyP1Summary) dom.lobbyP1Summary.textContent = formatLobbySelection(lobby.host);
+  if (dom.lobbyP2Summary) dom.lobbyP2Summary.textContent = formatLobbySelection(lobby.guest);
+
+  if (dom.lobbyTankOptions) {
+    dom.lobbyTankOptions.innerHTML = '';
+    Object.values(cat.tankTypes || {}).forEach((tt) => {
+      const tu = cat.turrets?.[tt.turretId];
+      const sp2 = cat.specials2?.[tt.special2Id];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `option-card tank-option-card ${state.selectedTankType === tt.id ? 'active' : ''}`;
+      btn.innerHTML = `
+        <div class="tank-card-row">
+          <canvas class="tank-mini-canvas" width="42" height="42"></canvas>
+          <div class="tank-card-body">
+            <div class="option-title">
+              <span style="color:${tt.color}">${tt.name}</span>
+              <span class="tank-card-badges">
+                ${tt.passiveName ? '<span class="mini-badge pas">PAS</span>' : ''}
+                <span class="mini-badge sp1">[2] ${tt.specialName} (${tu ? tu.cooldown : 2}t)</span>
+                <span class="mini-badge sp2">[3] ${sp2 ? sp2.name : tt.special2Name}</span>
+              </span>
+            </div>
+            <div class="option-desc">${tt.desc}</div>
+          </div>
+        </div>
+      `;
+      const miniCanvas = btn.querySelector('.tank-mini-canvas');
+      if (miniCanvas) {
+        const mCtx = miniCanvas.getContext('2d');
+        mCtx.imageSmoothingEnabled = false;
+        mCtx.save();
+        mCtx.translate(21, 21);
+        mCtx.scale(1.05, 1.05);
+        drawTankChassis(mCtx, tt.color, tt.accent, 0, state.selectedArmor);
+        drawTankTurret(mCtx, tt.turretId, tt.color, tt.accent, -0.35);
+        mCtx.restore();
+      }
+      btn.onclick = () => {
+        state.selectedTankType = tt.id;
+        emitAdhocLobbyUpdate();
+        renderAdhocLobby();
+      };
+      dom.lobbyTankOptions.appendChild(btn);
+    });
+  }
+
+  if (dom.lobbyArmorOptions) {
+    dom.lobbyArmorOptions.innerHTML = '';
+    const armors = cat.armors || {};
+    const maxArmorHp = Math.max(200, ...Object.values(armors).map((a) => a.maxHp || 0));
+    Object.values(armors).forEach((ar) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `option-card armor-option-card ${state.selectedArmor === ar.id ? 'active' : ''}`;
+      const hpPct = Math.round((ar.maxHp / maxArmorHp) * 100);
+      const apPct = Math.round((ar.moveAp / 26) * 100);
+      btn.innerHTML = `
+        <div class="option-title">
+          <span>${ar.name}</span>
+          <span style="color:#38bdf8;font-size:12px;">${ar.maxHp} PV • ${ar.moveAp} AP</span>
+        </div>
+        <div class="armor-bars">
+          <div class="armor-bar-row"><span>Resistencia</span><div class="armor-bar-track"><div class="armor-bar-fill hp" style="width:${hpPct}%"></div></div></div>
+          <div class="armor-bar-row"><span>Movilidad</span><div class="armor-bar-track"><div class="armor-bar-fill ap" style="width:${apPct}%"></div></div></div>
+        </div>
+      `;
+      btn.onclick = () => {
+        state.selectedArmor = ar.id;
+        emitAdhocLobbyUpdate();
+        renderAdhocLobby();
+      };
+      dom.lobbyArmorOptions.appendChild(btn);
+    });
+  }
+
+  const activeMap = lobby.mapStyle || state.selectedMap || 'bunkers';
+  if (dom.lobbyMapHostWrap) {
+    dom.lobbyMapHostWrap.classList.toggle('hidden', !isHost);
+    if (isHost) {
+      dom.lobbyMapHostWrap.querySelectorAll('[data-lobby-map]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.lobbyMap === activeMap);
+        btn.onclick = () => {
+          state.selectedMap = btn.dataset.lobbyMap;
+          emitAdhocLobbyUpdate();
+          renderAdhocLobby();
+        };
+      });
+    }
+  }
+  if (dom.lobbyMapGuestView) {
+    dom.lobbyMapGuestView.classList.toggle('hidden', isHost);
+  }
+  if (dom.lobbyGuestMapName) {
+    dom.lobbyGuestMapName.textContent = LOBBY_MAP_NAMES[activeMap] || activeMap;
+  }
+  if (dom.lobbyStartBtn) {
+    dom.lobbyStartBtn.classList.toggle('hidden', !isHost);
+    dom.lobbyStartBtn.disabled = !lobby.guest;
+  }
+  if (dom.lobbyStatusText) {
+    dom.lobbyStatusText.textContent = isHost
+      ? 'Anfitrión listo: pulsa "Iniciar Batalla" para entrar en la arena.'
+      : `Esperando a que el Anfitrión inicie en ${LOBBY_MAP_NAMES[activeMap] || activeMap}...`;
+  }
 }
 
 function renderAdhocRoomList() {
@@ -177,9 +339,27 @@ export function handleAdhocServerMessage(msg) {
 
   if (msg.type === 'adhoc_room_joined') {
     state.adhocRoomCode = msg.code;
+    state.adhocRoomSsid = msg.ssid || state.adhocRoomSsid;
     state.myTeam = msg.myTeam;
     stopAdhocDiscoveryPolling();
     if (resetBattleEffectsFn) resetBattleEffectsFn();
+    return true;
+  }
+
+  if (msg.type === 'adhoc_lobby_state') {
+    state.adhocLobby = msg;
+    const mySel = state.myTeam === 'player1' ? msg.host : msg.guest;
+    if (mySel) {
+      if (mySel.tankTypeId) state.selectedTankType = mySel.tankTypeId;
+      if (mySel.armorId) state.selectedArmor = mySel.armorId;
+    }
+    if (state.myTeam === 'player1' && msg.mapStyle) {
+      state.selectedMap = msg.mapStyle;
+    }
+    dom.hangarScreen?.classList.add('hidden');
+    dom.battleScreen?.classList.add('hidden');
+    dom.adhocLobbyScreen?.classList.remove('hidden');
+    renderAdhocLobby();
     return true;
   }
 
@@ -192,16 +372,16 @@ export function handleAdhocServerMessage(msg) {
   if (msg.type === 'adhoc_peer_left' || msg.type === 'adhoc_left') {
     state.adhocRoomCode = null;
     state.adhocRoomSsid = null;
+    state.adhocLobby = null;
     dom.adhocRoomWait?.classList.add('hidden');
     dom.adhocCancelBtn?.classList.add('hidden');
+    dom.adhocLobbyScreen?.classList.add('hidden');
     if (dom.adhocCreateBtn) dom.adhocCreateBtn.disabled = false;
     if (msg.message) showToast(msg.message);
-    if (!dom.battleScreen.classList.contains('hidden')) {
-      dom.gameoverOverlay.classList.add('hidden');
-      dom.battleScreen.classList.add('hidden');
-      dom.hangarScreen.classList.remove('hidden');
-      if (closeRemoteAdhocFn) closeRemoteAdhocFn();
-    }
+    dom.gameoverOverlay?.classList.add('hidden');
+    dom.battleScreen?.classList.add('hidden');
+    dom.hangarScreen?.classList.remove('hidden');
+    if (closeRemoteAdhocFn) closeRemoteAdhocFn();
     if (state.syncMode === 'pvp_adhoc' && dom.adhocGuestPane && !dom.adhocGuestPane.classList.contains('hidden')) {
       startAdhocDiscoveryPolling();
     }
@@ -324,6 +504,8 @@ export async function requestLegacyRematch() {
 
 export function resetMultiplayerOnHangarReturn() {
   stopAdhocDiscoveryPolling();
+  state.adhocLobby = null;
+  dom.adhocLobbyScreen?.classList.add('hidden');
   if (state.adhocRoomCode) {
     const sock = (state.adhocWs && state.adhocWs.readyState === 1) ? state.adhocWs : state.ws;
     if (sock && sock.readyState === 1) {
@@ -466,6 +648,20 @@ export function initMultiplayerUI({ sendLocalWs, connectRemoteAdhoc, closeRemote
       const label = selectedHost ? `${selectedHost.ssid} (${targetAddr})` : targetAddr;
       if (dom.adhocGuestStatus) dom.adhocGuestStatus.textContent = `Conectando con ${label}...`;
       connectRemoteAdhocFn(targetAddr, joinPayload);
+    };
+  }
+
+  if (dom.lobbyStartBtn) {
+    dom.lobbyStartBtn.onclick = () => {
+      if (state.myTeam !== 'player1') return;
+      sendAdhocRoomMsg({ type: 'adhoc_start_match' });
+    };
+  }
+
+  if (dom.lobbyLeaveBtn) {
+    dom.lobbyLeaveBtn.onclick = () => {
+      resetMultiplayerOnHangarReturn();
+      dom.hangarScreen?.classList.remove('hidden');
     };
   }
 

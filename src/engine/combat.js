@@ -14,6 +14,7 @@ const {
   findNearestEmptyPoint,
   computeOutgoingDamage,
   applyTankDamage,
+  classifyHitSectorByDir,
   applyRadialWallDamage,
   applyRadialTankDamage,
   buildWallBarricade
@@ -214,6 +215,33 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
         events.traces.push({ x1: ox, y1: oy, x2: wallHit.x, y2: wallHit.y, kind: 'freeze' });
         events.explosions.push({ x: wallHit.x, y: wallHit.y, radius: 1.8, kind: 'freeze' });
       }
+      return events;
+    }
+
+    if (sp2.id === 'tp') {
+      if (shooter.tpPending) {
+        events.tpBlocked = true;
+        return events;
+      }
+      const reqDist = Math.hypot((targetX ?? ox + Math.cos(angle) * 20) - ox, (targetY ?? oy + Math.sin(angle) * 20) - oy);
+      const clampedDist = Math.max(4, Math.min(sp2.range, reqDist));
+      const ix = Math.max(3, Math.min(GRID_W - 3, ox + Math.cos(angle) * clampedDist));
+      const iy = Math.max(3, Math.min(GRID_H - 3, oy + Math.sin(angle) * clampedDist));
+      const spot = findNearestEmptyPoint(game.grid, game.tanks, ix, iy, TANK_SIZE, 8);
+      if (!spot) {
+        events.tpBlocked = true;
+        return events;
+      }
+      shooter.special2Cooldown = sp2.cooldown;
+      shooter.tpPending = true;
+      shooter.tpTarget = { x: spot.x, y: spot.y };
+      shooter.tpShieldActive = true;
+      shooter.tpShieldReduction = sp2.shieldReduction ?? 0.35;
+      shooter.moveAp = 0;
+      shooter.canShoot = false;
+      events.traces.push({ x1: ox, y1: oy, x2: spot.x + TANK_SIZE / 2, y2: spot.y + TANK_SIZE / 2, kind: 'tp' });
+      events.explosions.push({ x: ox, y: oy, radius: 2.8, kind: 'tp_charge' });
+      events.explosions.push({ x: spot.x + TANK_SIZE / 2, y: spot.y + TANK_SIZE / 2, radius: 2.2, kind: 'tp_mark' });
       return events;
     }
 
@@ -645,6 +673,38 @@ function resolveShot(game, shooter, mode, angle, targetX, targetY) {
       aimAngle: angle,
       dir: angle
     });
+  } else if (shooter.turretId === 'sneak_strike') {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const wallHit = raycastWallDDA(game.grid, ox, oy, dx, dy, 180);
+    const targetHit = findClosestTankHit(game.tanks, ox, oy, dx, dy, wallHit.t, shooter.id, game.deployables);
+
+    if (targetHit) {
+      events.traces.push({ x1: ox, y1: oy, x2: targetHit.x, y2: targetHit.y, kind: 'sneak_strike' });
+      events.explosions.push({ x: targetHit.x, y: targetHit.y, radius: 2.3, kind: 'sneak_strike' });
+      if (targetHit.kind === 'tank') {
+        const sector = classifyHitSectorByDir(targetHit.tank, targetHit.x, targetHit.y);
+        const mult = sector === 'back'
+          ? (turret.backMultiplier ?? 1.5)
+          : sector === 'front'
+            ? (turret.frontMultiplier ?? 0.75)
+            : 1;
+        const rawDmg = Math.round(computeOutgoingDamage(shooter, turret.specialDamage) * mult);
+        recordTargetHit(targetHit, rawDmg, targetHit.x, targetHit.y);
+        if (events.tankHits.length > 0) {
+          events.tankHits[events.tankHits.length - 1].hitSector = sector;
+        }
+      } else {
+        recordTargetHit(targetHit, computeOutgoingDamage(shooter, turret.specialDamage), targetHit.x, targetHit.y);
+      }
+      mergeCellChanges(applyRadialWallDamage(game.grid, targetHit.x, targetHit.y, 1.8, 2, 0.8));
+    } else {
+      events.traces.push({ x1: ox, y1: oy, x2: wallHit.x, y2: wallHit.y, kind: 'sneak_strike' });
+      events.explosions.push({ x: wallHit.x, y: wallHit.y, radius: 2.0, kind: 'sneak_strike' });
+      if (wallHit.hit) {
+        mergeCellChanges(applyRadialWallDamage(game.grid, wallHit.x, wallHit.y, 2.0, 3, 0.9));
+      }
+    }
   }
 
   return events;

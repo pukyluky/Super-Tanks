@@ -49,8 +49,13 @@ function attachWebSocketSession(req, socket, {
   );
 
   let connected = true;
+  if (typeof socket.setKeepAlive === 'function') {
+    try {
+      socket.setKeepAlive(true, 5000);
+    } catch (_) {}
+  }
   activeWsSockets.add(socket);
-  if (onWsConnected) onWsConnected();
+  if (onWsConnected) onWsConnected(socket);
   let rxBuffer = Buffer.alloc(0);
   let game = null;
   let legacyMyTeam = 'player1';
@@ -82,7 +87,7 @@ function attachWebSocketSession(req, socket, {
     stopHostedBroadcastIfOwner();
     leaveAdhocRoom(member);
     if (activeWsSockets.delete(socket)) {
-      if (onWsDisconnected) onWsDisconnected();
+      if (onWsDisconnected) onWsDisconnected(socket);
     }
   };
 

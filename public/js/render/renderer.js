@@ -17,6 +17,7 @@ export function syncVisualTanks(snap = false) {
         y: t.y,
         dir: t.dir,
         aimAngle: t.aimAngle,
+        hidden: Boolean(t.hidden),
         queue: [],
         pendingShots: []
       });
@@ -74,6 +75,22 @@ function drawStatusRingsAndBadges(tank, cx, cy, isSpritePass) {
       ctx.arc(0, 0, 23, 0, Math.PI * 2);
       ctx.stroke();
     }
+    if (tank.tpShieldActive) {
+      ctx.strokeStyle = '#818cf8';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 23, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if ((tank.invisibleTurns || 0) > 0) {
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     return;
   }
 
@@ -89,13 +106,25 @@ function drawStatusRingsAndBadges(tank, cx, cy, isSpritePass) {
     (tank.burnTurns || 0) > 0 ||
     (tank.stunnedTurns || 0) > 0 ||
     (tank.silencedTurns || 0) > 0 ||
-    tank.rageActive
+    tank.rageActive ||
+    tank.tpShieldActive ||
+    (tank.invisibleTurns || 0) > 0
   ) {
     ctx.font = 'bold 9px monospace';
     let topOffset = 26;
     if (tank.rageActive) {
       ctx.fillStyle = '#fb7185';
       ctx.fillText('IRA -90%', cx - 18, cy - topOffset);
+      topOffset += 9;
+    }
+    if (tank.tpShieldActive) {
+      ctx.fillStyle = '#a5b4fc';
+      ctx.fillText('ESC -35%', cx - 18, cy - topOffset);
+      topOffset += 9;
+    }
+    if ((tank.invisibleTurns || 0) > 0) {
+      ctx.fillStyle = '#e9d5ff';
+      ctx.fillText(`INV ${tank.invisibleTurns}t`, cx - 14, cy - topOffset);
       topOffset += 9;
     }
     if ((tank.poisonTurns || 0) > 0) {
@@ -161,13 +190,39 @@ export function startRenderLoop(onShotResolved) {
         }
       }
 
+      if (player && player.alive && player.team === myId && player.tpPending && player.tpTarget) {
+        const boxPx = state.tankSize * CELL_PX;
+        const tx = player.tpTarget.x * CELL_PX;
+        const ty = player.tpTarget.y * CELL_PX;
+        const pulse = 0.45 + 0.35 * Math.sin(now * 0.008);
+        ctx.save();
+        ctx.strokeStyle = `rgba(129, 140, 248, ${pulse})`;
+        ctx.fillStyle = 'rgba(129, 140, 248, 0.18)';
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 2;
+        ctx.fillRect(tx, ty, boxPx, boxPx);
+        ctx.strokeRect(tx, ty, boxPx, boxPx);
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#c7d2fe';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('TP', tx + boxPx / 2 - 7, ty + boxPx / 2 + 4);
+        ctx.restore();
+      }
+
       for (const tank of state.tanks) {
-        if (!tank.alive) continue;
+        if (!tank.alive || tank.hidden) continue;
         let vt = state.visualTanks.get(tank.id);
         if (!vt) {
-          vt = { x: tank.x, y: tank.y, dir: tank.dir, aimAngle: tank.aimAngle, queue: [], pendingShots: [] };
+          vt = { x: tank.x, y: tank.y, dir: tank.dir, aimAngle: tank.aimAngle, hidden: false, queue: [], pendingShots: [] };
           state.visualTanks.set(tank.id, vt);
+        } else if (vt.hidden) {
+          vt.x = tank.x;
+          vt.y = tank.y;
+          vt.dir = tank.dir;
+          vt.aimAngle = tank.aimAngle;
+          vt.queue = [];
         }
+        vt.hidden = false;
 
         if (vt.queue.length > 0) {
           let remainingMove = 34 * dt;
@@ -209,9 +264,36 @@ export function startRenderLoop(onShotResolved) {
 
         ctx.save();
         ctx.translate(cx, cy);
+        if ((tank.invisibleTurns || 0) > 0) {
+          ctx.globalAlpha = 0.42;
+        }
         drawStatusRingsAndBadges(tank, cx, cy, true);
         drawTankChassis(ctx, tank.color, tank.accent, vt.dir, tank.armorId);
         drawTankTurret(ctx, tank.turretId, tank.color, tank.accent, vt.aimAngle);
+        const showBackstabLine = Boolean(
+          myTurn &&
+          player &&
+          player.alive &&
+          !usingDrone &&
+          player.turretId === 'sneak_strike' &&
+          state.weaponMode === 'special' &&
+          player.specialCooldown === 0 &&
+          tank.team !== myId
+        );
+        if (showBackstabLine) {
+          ctx.save();
+          ctx.rotate(vt.dir);
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 6;
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-13.5, -8.5);
+          ctx.lineTo(-13.5, 8.5);
+          ctx.stroke();
+          ctx.restore();
+        }
         ctx.restore();
 
         drawStatusRingsAndBadges(tank, cx, cy, false);

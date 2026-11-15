@@ -1,25 +1,25 @@
 const LIGHT_ARMOR = {
   id: 'light',
   name: 'Blindaje Ligero',
-  maxHp: 85,
+  maxHp: 100,
   moveAp: 26,
-  desc: 'Alta movilidad por turno (26 casillas) y blindaje ligero (85 PV).'
+  desc: 'Alta movilidad por turno (26 casillas) y blindaje ligero (100 PV).'
 };
 
 const MEDIUM_ARMOR = {
   id: 'medium',
   name: 'Blindaje Medio',
-  maxHp: 115,
+  maxHp: 150,
   moveAp: 19,
-  desc: 'Equilibrio táctico entre movilidad (19 casillas) y resistencia (115 PV).'
+  desc: 'Equilibrio táctico entre movilidad (19 casillas) y resistencia (150 PV).'
 };
 
 const HEAVY_ARMOR = {
   id: 'heavy',
   name: 'Blindaje Pesado',
-  maxHp: 155,
+  maxHp: 200,
   moveAp: 13,
-  desc: 'Blindaje pesado (155 PV) con menor desplazamiento (13 casillas).'
+  desc: 'Blindaje pesado (200 PV) con menor desplazamiento (13 casillas).'
 };
 
 const ARMOR_CATALOG = {

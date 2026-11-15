@@ -1,5 +1,9 @@
+const { ARMOR_CATALOG } = require('../data/armors');
+const { TANK_TYPES_CATALOG } = require('../data/tanks');
 const { createPvpMatch, serializeState, advancePvpTurn } = require('../engine/match');
 const { broadcastForRecipients, executeTurnAction } = require('../engine/turnExecutor');
+
+const ALLOWED_MAPS = new Set(['bunkers', 'labyrinth', 'open', 'random']);
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const rooms = new Map();
@@ -115,6 +119,29 @@ function startRoomMatch(room) {
   room.guest.sendJson(serializeState(room.game, 'player2'));
 }
 
+function buildLobbyState(room) {
+  return {
+    type: 'adhoc_lobby_state',
+    code: room.code,
+    ssid: room.ssid,
+    mapStyle: room.mapStyle || 'bunkers',
+    host: room.host?.selection ? {
+      tankTypeId: room.host.selection.tankTypeId,
+      armorId: room.host.selection.armorId
+    } : null,
+    guest: room.guest?.selection ? {
+      tankTypeId: room.guest.selection.tankTypeId,
+      armorId: room.guest.selection.armorId
+    } : null
+  };
+}
+
+function broadcastLobbyState(room) {
+  const payload = buildLobbyState(room);
+  if (room.host && room.host.isConnected()) room.host.sendJson(payload);
+  if (room.guest && room.guest.isConnected()) room.guest.sendJson(payload);
+}
+
 function joinAdhocRoom(msg, guestMember) {
   const code = String(msg.code || '').trim().toUpperCase();
   const room = rooms.get(code);
@@ -136,21 +163,61 @@ function joinAdhocRoom(msg, guestMember) {
   guestMember.roomCode = code;
   guestMember.team = 'player2';
   guestMember.selection = {
-    tankTypeId: msg.tankTypeId,
-    armorId: msg.armorId,
+    tankTypeId: TANK_TYPES_CATALOG[msg.tankTypeId] ? msg.tankTypeId : 'artillery',
+    armorId: ARMOR_CATALOG[msg.armorId] ? msg.armorId : 'medium',
     playerName: msg.playerName || null
   };
   room.guest = guestMember;
 
-  room.host.sendJson({ type: 'adhoc_room_joined', code, myTeam: 'player1', role: 'host' });
-  guestMember.sendJson({ type: 'adhoc_room_joined', code, myTeam: 'player2', role: 'guest' });
-  startRoomMatch(room);
+  room.host.sendJson({ type: 'adhoc_room_joined', code, ssid: room.ssid, myTeam: 'player1', role: 'host' });
+  guestMember.sendJson({ type: 'adhoc_room_joined', code, ssid: room.ssid, myTeam: 'player2', role: 'guest' });
+  broadcastLobbyState(room);
   return room;
+}
+
+function updateAdhocLobby(member, msg) {
+  const room = rooms.get(member.roomCode);
+  if (!room || room.game) return false;
+  const prev = member.selection || {};
+  member.selection = {
+    tankTypeId: TANK_TYPES_CATALOG[msg.tankTypeId] ? msg.tankTypeId : (prev.tankTypeId || 'artillery'),
+    armorId: ARMOR_CATALOG[msg.armorId] ? msg.armorId : (prev.armorId || 'medium'),
+    playerName: prev.playerName || null
+  };
+  if (member === room.host && typeof msg.mapStyle === 'string' && ALLOWED_MAPS.has(msg.mapStyle)) {
+    room.mapStyle = msg.mapStyle;
+  }
+  broadcastLobbyState(room);
+  return true;
+}
+
+function startAdhocLobbyMatch(member) {
+  const room = rooms.get(member.roomCode);
+  if (!room || room.game) return false;
+  if (member !== room.host) {
+    member.sendJson({ type: 'toast', message: 'Solo el anfitrión puede iniciar el combate.' });
+    return true;
+  }
+  if (!room.host?.isConnected() || !room.guest?.isConnected()) {
+    member.sendJson({ type: 'toast', message: 'Falta el jugador invitado en la antesala.' });
+    return true;
+  }
+  startRoomMatch(room);
+  return true;
 }
 
 async function handleAdhocGameAction(member, msg) {
   const room = rooms.get(member.roomCode);
-  if (!room || !room.game) return false;
+  if (!room) return false;
+
+  if (msg.type === 'adhoc_lobby_update') {
+    return updateAdhocLobby(member, msg);
+  }
+  if (msg.type === 'adhoc_start_match') {
+    return startAdhocLobbyMatch(member);
+  }
+
+  if (!room.game) return false;
   const game = room.game;
 
   if (msg.type === 'pvp_rematch') {

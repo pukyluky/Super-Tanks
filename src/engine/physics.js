@@ -298,9 +298,37 @@ function applyTankDamage(tank, rawDamage) {
     const red = tank.rageDamageReduction ?? 0.9;
     finalDmg = Math.max(1, Math.round(rawDamage * (1 - red)));
   }
+  if (tank.tpShieldActive) {
+    const red = tank.tpShieldReduction ?? 0.35;
+    finalDmg = Math.max(1, Math.round(finalDmg * (1 - red)));
+  }
   tank.hp = Math.max(0, tank.hp - finalDmg);
   if (tank.hp === 0) tank.alive = false;
   return finalDmg;
+}
+
+/**
+ * Classifies where a shot hit `target` relative to its chassis facing (`target.dir`, last movement).
+ * Only the two wheel-less front/rear panels (|sideDot| <= |forwardDot| * 0.75) count as front/back;
+ * the two wheeled flanks count as 'side'.
+ */
+function classifyHitSectorByDir(target, hx, hy) {
+  if (!target) return 'side';
+  const cx = target.x + 2;
+  const cy = target.y + 2;
+  const dx = hx - cx;
+  const dy = hy - cy;
+  const len = Math.hypot(dx, dy);
+  if (len <= 1e-6) return 'side';
+  const angle = Number.isFinite(target.dir) ? target.dir : 0;
+  const fx = Math.cos(angle);
+  const fy = Math.sin(angle);
+  const forwardDot = dx * fx + dy * fy;
+  const sideDot = dx * (-fy) + dy * fx;
+  if (Math.abs(sideDot) <= Math.abs(forwardDot) * 0.75) {
+    return forwardDot < 0 ? 'back' : 'front';
+  }
+  return 'side';
 }
 
 function applyRadialTankDamage(tanks, cx, cy, radius, maxDamage, minDamage = 10, deployables = []) {
@@ -456,6 +484,7 @@ module.exports = {
   findNearestEmptyPoint,
   computeOutgoingDamage,
   applyTankDamage,
+  classifyHitSectorByDir,
   applyRadialWallDamage,
   applyRadialTankDamage,
   buildWallBarricade,

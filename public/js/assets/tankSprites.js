@@ -130,6 +130,17 @@ export const PIERCING_TURRET_SPRITE = {
   }
 };
 
+export const SNEAK_STRIKE_TURRET_SPRITE = {
+  draw(c) {
+    c.fillStyle = '#1e1b4b';
+    c.fillRect(2, -3, 18, 6);
+    c.fillStyle = '#818cf8';
+    c.fillRect(6, -1.5, 13, 3);
+    c.fillStyle = '#c084fc';
+    c.fillRect(17, -2.5, 5, 5);
+  }
+};
+
 export const TURRET_SPRITES = {
   mortar: MORTAR_TURRET_SPRITE,
   shotgun: SHOTGUN_TURRET_SPRITE,
@@ -139,7 +150,8 @@ export const TURRET_SPRITES = {
   fire_shot: FIRE_SHOT_TURRET_SPRITE,
   drone: DRONE_TURRET_SPRITE,
   bloodsucker: BLOODSUCKER_TURRET_SPRITE,
-  piercing: PIERCING_TURRET_SPRITE
+  piercing: PIERCING_TURRET_SPRITE,
+  sneak_strike: SNEAK_STRIKE_TURRET_SPRITE
 };
 
 export function drawTankChassis(c, color, accent, dir, armorId = 'medium') {

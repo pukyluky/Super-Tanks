@@ -104,6 +104,16 @@ const BLOODSUCKER_ABILITY = {
   desc: 'Escopeta corta (7 perdigones de 5 daño, rango 26): recupera un 30% del daño infligido en impacto como vida.'
 };
 
+const SNEAK_STRIKE_ABILITY = {
+  id: 'sneak_strike',
+  name: 'Golpe Trampero',
+  cooldown: 2,
+  specialDamage: 44,
+  backMultiplier: 1.5,
+  frontMultiplier: 0.75,
+  desc: 'Disparo de precisión (44 daño base): según el último movimiento rival, inflige 150% (66) por la espalda y -25% (33) por delante.'
+};
+
 const TURRET_CATALOG = {
   mortar: MORTAR_ABILITY,
   shotgun: SHOTGUN_ABILITY,
@@ -113,7 +123,8 @@ const TURRET_CATALOG = {
   toxic: TOXIC_ABILITY,
   fire_shot: FIRE_SHOT_ABILITY,
   drone: DRONE_ABILITY,
-  bloodsucker: BLOODSUCKER_ABILITY
+  bloodsucker: BLOODSUCKER_ABILITY,
+  sneak_strike: SNEAK_STRIKE_ABILITY
 };
 
 module.exports = {
@@ -126,5 +137,6 @@ module.exports = {
   FIRE_SHOT_ABILITY,
   DRONE_ABILITY,
   BLOODSUCKER_ABILITY,
+  SNEAK_STRIKE_ABILITY,
   TURRET_CATALOG
 };

@@ -8,6 +8,7 @@ const {
   delay,
   getControlledTank,
   checkGameOver,
+  serializeTanksForPlayer,
   serializeState
 } = require('./match');
 
@@ -25,11 +26,40 @@ function broadcastForRecipients(game, msg, getRecipients) {
     return;
   }
   if (msg.type === 'shot_resolved' || msg.type === 'hazard_triggered') {
+    const stealthMask = msg.type === 'shot_resolved' ? (msg.stealthMask || msg.stealthTrap) : null;
     for (const r of recipients) {
-      r.send({
+      const visibleTanks = serializeTanksForPlayer(game, r.team);
+      if (stealthMask && game && game.isPvp && r.team !== stealthMask.shooterTeam) {
+        const keptExplosions = stealthMask.keepExplosionKind
+          ? (msg.events?.explosions || []).filter((e) => e.kind === stealthMask.keepExplosionKind)
+          : [];
+        r.send({
+          type: msg.type,
+          events: {
+            ...msg.events,
+            aimAngle: stealthMask.maskedAimAngle,
+            traces: [],
+            explosions: keptExplosions,
+            damagedCells: [],
+            heals: [],
+            empAffected: []
+          },
+          tanks: visibleTanks,
+          deployables: msg.deployables,
+          activeControl: msg.activeControl,
+          logs: msg.logs,
+          hazards: serializeHazardsForPlayer(game, r.team)
+        });
+        continue;
+      }
+      const payload = {
         ...msg,
+        tanks: visibleTanks,
         hazards: serializeHazardsForPlayer(game, r.team)
-      });
+      };
+      delete payload.stealthMask;
+      delete payload.stealthTrap;
+      r.send(payload);
     }
     return;
   }
@@ -109,6 +139,12 @@ async function executeTurnAction(game, msg, ctx) {
 
   const runMovement = async (plannedSteps, autoEndWaitMs) => {
     const { takenSteps, hazardEvents } = processMovementWithHazards(game, activeUnit, plannedSteps);
+    let uncloaked = false;
+    if (!usingDrone && takenSteps.length > 0 && (activeUnit.invisibleTurns || 0) > 0) {
+      activeUnit.invisibleTurns = 0;
+      uncloaked = true;
+      game.logs.unshift(`👁️ ${activeUnit.name} se mueve y pierde el sigilo.`);
+    }
     emitAll({
       type: 'tank_moved',
       tankId: activeUnit.id,
@@ -116,7 +152,9 @@ async function executeTurnAction(game, msg, ctx) {
       y: activeUnit.y,
       dir: activeUnit.dir,
       moveAp: activeUnit.moveAp,
-      path: takenSteps
+      path: takenSteps,
+      uncloaked,
+      logs: uncloaked ? game.logs.slice(0, 12) : undefined
     });
     for (const hev of hazardEvents) {
       emitAll({
@@ -242,14 +280,33 @@ async function executeTurnAction(game, msg, ctx) {
       mode = 'special2';
     }
 
+    const prevAimAngle = activeUnit.aimAngle;
     const angle = Number(msg.angle) || 0;
+    const isStealthTrapShot = Boolean(!usingDrone && mode === 'special2' && controlledTank.special2Id === 'trap');
+    const isStealthTpShot = Boolean(!usingDrone && mode === 'special2' && controlledTank.special2Id === 'tp');
     activeUnit.aimAngle = angle;
 
     const wasCharged = !usingDrone && controlledTank.chargedReady;
     const wasInTrapBurst = !usingDrone && controlledTank.trapBurstRemaining > 0;
     const prevCanShoot = activeUnit.canShoot;
     const shotEvents = resolveShot(game, activeUnit, mode, angle, msg.targetX, msg.targetY);
-    activeUnit.canShoot = isSelfBuff ? prevCanShoot : (usingDrone ? false : controlledTank.trapBurstRemaining > 0);
+    if (shotEvents.tpBlocked) {
+      activeUnit.aimAngle = prevAimAngle;
+      notifyActor({ type: 'toast', message: 'No hay espacio libre para el TP en esa zona.' });
+      return false;
+    }
+    if (!usingDrone && (activeUnit.invisibleTurns || 0) > 0) {
+      activeUnit.invisibleTurns = 0;
+      game.logs.unshift(`👁️ ${activeUnit.name} dispara y pierde el sigilo.`);
+    }
+    if ((isStealthTrapShot || isStealthTpShot) && game.isPvp) {
+      activeUnit.aimAngle = prevAimAngle;
+    }
+    activeUnit.canShoot = isSelfBuff
+      ? prevCanShoot
+      : isStealthTpShot
+        ? false
+        : (usingDrone ? false : controlledTank.trapBurstRemaining > 0);
 
     const weaponLabel = mode === 'special2'
       ? SPECIAL2_CATALOG[activeUnit.special2Id].name
@@ -262,7 +319,10 @@ async function executeTurnAction(game, msg, ctx) {
             : 'Cañón Estándar';
 
     const hitSummary = shotEvents.tankHits
-      .map((h) => `${h.tankName} (-${h.damage} PV${h.destroyed ? ' ¡DESTRUIDO!' : ''})`)
+      .map((h) => {
+        const sectorTag = h.hitSector === 'back' ? ' ¡ESPALDA!' : h.hitSector === 'front' ? ' (Frontal)' : '';
+        return `${h.tankName} (-${h.damage} PV${sectorTag}${h.destroyed ? ' ¡DESTRUIDO!' : ''})`;
+      })
       .join(', ');
     const healSummary = (shotEvents.heals || []).map((hl) => `+${hl.amount} PV robados`).join(', ');
     const empSummary = (shotEvents.empAffected || []).join(', ');
@@ -272,6 +332,8 @@ async function executeTurnAction(game, msg, ctx) {
 
     if (mode === 'special2' && controlledTank.special2Id === 'rage') {
       game.logs.unshift(`¡${controlledTank.name} activa Ira! → -90% daño recibido (1t), +${shotEvents.rageBonusAp} AP desplazamiento`);
+    } else if (mode === 'special2' && controlledTank.special2Id === 'tp') {
+      game.logs.unshift(`⏳ ${controlledTank.name} prepara TP (escudo -35% daño durante 1 turno, sin moverse ni disparar).`);
     } else if (mode === 'special2' && controlledTank.special2Id === 'charged_shot' && !wasCharged) {
       game.logs.unshift(`${controlledTank.name} carga Tiro Cargado para el próximo turno.`);
     } else if (mode === 'special2' && controlledTank.special2Id === 'trap') {
@@ -289,6 +351,11 @@ async function executeTurnAction(game, msg, ctx) {
     emitAll({
       type: 'shot_resolved',
       events: shotEvents,
+      stealthMask: isStealthTrapShot
+        ? { shooterTeam: controlledTank.team, maskedAimAngle: prevAimAngle, keepExplosionKind: null }
+        : isStealthTpShot
+          ? { shooterTeam: controlledTank.team, maskedAimAngle: prevAimAngle, keepExplosionKind: 'tp_charge' }
+          : null,
       tanks: game.tanks,
       deployables: game.deployables,
       activeControl: game.activeControl,

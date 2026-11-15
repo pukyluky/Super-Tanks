@@ -103,7 +103,7 @@ function raycastWallClient(ox, oy, dx, dy, maxDist = 180) {
 function findClosestEntityHit(ox, oy, dx, dy, maxDist, ignoreId) {
   let best = null;
   for (const tank of state.tanks || []) {
-    if (!tank.alive || tank.id === ignoreId) continue;
+    if (!tank.alive || tank.hidden || tank.id === ignoreId) continue;
     const t = intersectRayAABB(ox, oy, dx, dy, tank.x, tank.y, state.tankSize, state.tankSize);
     if (t !== null && t <= maxDist && (!best || t < best.t)) {
       best = { kind: 'tank', t, x: ox + dx * t, y: oy + dy * t };
@@ -512,6 +512,14 @@ export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.strokeRect(tx - CELL_PX, ty - CELL_PX, CELL_PX * 2, CELL_PX * 2);
+  } else if (!usingDrone && state.weaponMode === 'special' && player.turretId === 'sneak_strike' && player.specialCooldown === 0) {
+    drawDirectBeamPreview(ctx, ox, oy, angle, aimUnit.id, {
+      baseColor: 'rgba(192, 132, 252, 0.82)',
+      wallColor: 'rgba(248, 113, 113, 0.85)',
+      hitColor: 'rgba(192, 132, 252, 0.96)',
+      lineWidth: 2.2,
+      dash: [6, 4]
+    });
   } else if (
     state.weaponMode === 'special2' &&
     aimUnit.special2Id &&
@@ -550,6 +558,26 @@ export function drawAimPreview(ctx, player, playerDrone, usingDrone) {
       ctx.fillRect(-wPx / 2, -hPx / 2, wPx, hPx);
       ctx.strokeRect(-wPx / 2, -hPx / 2, wPx, hPx);
       ctx.restore();
+    } else if (sp2.id === 'tp') {
+      const dist = Math.min(sp2.range, Math.max(4, Math.hypot(state.mouseGrid.x - ox, state.mouseGrid.y - oy)));
+      const tx = (ox + Math.cos(angle) * dist) * CELL_PX;
+      const ty = (oy + Math.sin(angle) * dist) * CELL_PX;
+      const boxPx = state.tankSize * CELL_PX;
+      ctx.strokeStyle = SPECIAL2_PREVIEW_COLORS.tp;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+
+      ctx.setLineDash([3, 3]);
+      ctx.fillStyle = 'rgba(129, 140, 248, 0.2)';
+      ctx.fillRect(tx - boxPx / 2, ty - boxPx / 2, boxPx, boxPx);
+      ctx.strokeRect(tx - boxPx / 2, ty - boxPx / 2, boxPx, boxPx);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#c7d2fe';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText('TP', tx - 7, ty + 4);
     } else {
       const dist = Math.min(sp2.range, Math.max(5, Math.hypot(state.mouseGrid.x - ox, state.mouseGrid.y - oy)));
       const tx = (ox + Math.cos(angle) * dist) * CELL_PX;

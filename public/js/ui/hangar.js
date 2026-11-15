@@ -93,6 +93,9 @@ function formatSpecial1Damage(tu) {
   if (tu.id === 'drone') {
     return `${tu.droneShotDamage} PV/tiro (${tu.droneHp} PV, ${tu.droneMoveAp} AP)`;
   }
+  if (tu.id === 'sneak_strike') {
+    return `${tu.specialDamage} PV (Espalda ${Math.round(tu.specialDamage * tu.backMultiplier)} / Frontal ${Math.round(tu.specialDamage * tu.frontMultiplier)})`;
+  }
   return `${tu.specialDamage} PV`;
 }
 
@@ -118,6 +121,9 @@ function formatSpecial2Damage(sp2) {
   }
   if (sp2.id === 'rage') {
     return `Req. <25% PV • -${Math.round(sp2.damageReduction * 100)}% daño recibido • +${Math.round(sp2.moveBonusPercent * 100)}% mov. (1t)`;
+  }
+  if (sp2.id === 'tp') {
+    return `1t espera (-${Math.round(sp2.shieldReduction * 100)}% daño) • TP + ${sp2.invisTurns}t sigilo`;
   }
   return `${sp2.damage} PV`;
 }
@@ -272,7 +278,8 @@ export function renderHangarOptions() {
   Object.values(armors).forEach((ar) => {
     const btn = document.createElement('button');
     btn.className = `option-card armor-option-card ${state.selectedArmor === ar.id ? 'active' : ''}`;
-    const hpPct = Math.round((ar.maxHp / 155) * 100);
+    const maxArmorHp = Math.max(200, ...Object.values(armors).map((a) => a.maxHp || 0));
+    const hpPct = Math.round((ar.maxHp / maxArmorHp) * 100);
     const apPct = Math.round((ar.moveAp / 26) * 100);
     btn.innerHTML = `
       <div class="option-title">

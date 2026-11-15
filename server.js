@@ -33,26 +33,49 @@ function getLanIpv4Addresses() {
 }
 
 const activeWsSockets = new Set();
+const localWsSockets = new Set();
 let isShuttingDown = false;
 let hasHadWsClient = false;
+let hasHadLocalWsClient = false;
 let idleShutdownTimer = null;
 
-function onWsConnected() {
+function isLoopbackAddress(addr) {
+  const raw = String(addr || '').trim();
+  return raw === '127.0.0.1' || raw === '::1' || raw === '::ffff:127.0.0.1';
+}
+
+function scheduleIdleShutdown(delayMs = 1500) {
+  if (isShuttingDown) return;
+  if (idleShutdownTimer) clearTimeout(idleShutdownTimer);
+  idleShutdownTimer = setTimeout(() => {
+    if (isShuttingDown) return;
+    if ((hasHadLocalWsClient && localWsSockets.size === 0) || (hasHadWsClient && activeWsSockets.size === 0)) {
+      shutdownServer();
+    }
+  }, delayMs);
+}
+
+function onWsConnected(socket) {
   hasHadWsClient = true;
+  if (socket && isLoopbackAddress(socket.remoteAddress)) {
+    hasHadLocalWsClient = true;
+    localWsSockets.add(socket);
+  }
   if (idleShutdownTimer) {
     clearTimeout(idleShutdownTimer);
     idleShutdownTimer = null;
   }
 }
 
-function onWsDisconnected() {
-  if (!hasHadWsClient || isShuttingDown || activeWsSockets.size > 0) return;
-  if (idleShutdownTimer) clearTimeout(idleShutdownTimer);
-  idleShutdownTimer = setTimeout(() => {
-    if (!isShuttingDown && activeWsSockets.size === 0) {
-      shutdownServer();
-    }
-  }, 2500);
+function onWsDisconnected(socket) {
+  if (socket) localWsSockets.delete(socket);
+  if (!hasHadWsClient || isShuttingDown) return;
+  if (hasHadLocalWsClient) {
+    if (localWsSockets.size > 0) return;
+  } else if (activeWsSockets.size > 0) {
+    return;
+  }
+  scheduleIdleShutdown(1500);
 }
 
 function shutdownServer() {
@@ -62,15 +85,22 @@ function shutdownServer() {
     clearTimeout(idleShutdownTimer);
     idleShutdownTimer = null;
   }
-  console.log('Cerrando servidor por petición del jugador...');
+  console.log('Cerrando servidor automáticamente tras salir del juego...');
   adhocDiscovery.stop();
   for (const sock of activeWsSockets) {
     try {
-      sock.end();
+      sock.destroy();
+    } catch (_) {}
+  }
+  activeWsSockets.clear();
+  localWsSockets.clear();
+  if (typeof server.closeAllConnections === 'function') {
+    try {
+      server.closeAllConnections();
     } catch (_) {}
   }
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 250);
+  setTimeout(() => process.exit(0), 200);
 }
 
 const server = http.createServer((req, res) => {
@@ -87,6 +117,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ ok: true, message: 'Servidor cerrándose...' }));
     setTimeout(shutdownServer, 80);
+    return;
+  }
+  if (req.method === 'POST' && urlPath === '/api/client-closing') {
+    const isLocal = isLoopbackAddress(req.socket && req.socket.remoteAddress);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true }));
+    if (isLocal && hasHadLocalWsClient) {
+      scheduleIdleShutdown(1500);
+    }
     return;
   }
   if (urlPath === '/api/display-settings') {
@@ -178,7 +217,10 @@ const server = http.createServer((req, res) => {
       return;
     }
     const ext = path.extname(fullPath);
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-store'
+    });
     res.end(content);
   });
 });

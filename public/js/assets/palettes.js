@@ -11,6 +11,8 @@ export const TRACE_COLORS = {
   fire_wall: (a) => `rgba(239, 68, 68, ${a})`,
   bloodsucker: (a) => `rgba(225, 29, 72, ${a})`,
   piercing: (a) => `rgba(232, 121, 249, ${a})`,
+  sneak_strike: (a) => `rgba(192, 132, 252, ${a})`,
+  tp: (a) => `rgba(129, 140, 248, ${a})`,
   trap: (a) => `rgba(232, 121, 249, ${a})`,
   builder: (a) => `rgba(45, 212, 191, ${a})`,
   molotov: (a) => `rgba(249, 115, 22, ${a})`,
@@ -37,6 +39,9 @@ export const PARTICLE_PALETTES = {
   rage: ['#e11d48', '#f43f5e', '#fbbf24', '#ffffff'],
   heal: ['#4ade80', '#22c55e', '#bbf7d0', '#ffffff'],
   piercing: ['#e879f9', '#f5d0fe', '#ffffff'],
+  sneak_strike: ['#818cf8', '#c084fc', '#e9d5ff', '#ffffff'],
+  tp_charge: ['#818cf8', '#6366f1', '#38bdf8', '#e0e7ff'],
+  tp_mark: ['#c084fc', '#818cf8', '#a5b4fc', '#ffffff'],
   builder: ['#2dd4bf', '#99f6e4', '#b85d40', '#ffffff'],
   trap: ['#a855f7', '#e9d5ff', '#38bdf8'],
   trap_place: ['#a855f7', '#e9d5ff', '#38bdf8'],
@@ -54,6 +59,7 @@ export const SPECIAL2_PREVIEW_COLORS = {
   molotov: 'rgba(249, 115, 22, 0.8)',
   emp_bomb: 'rgba(0, 212, 255, 0.88)',
   trap: 'rgba(192, 132, 252, 0.8)',
+  tp: 'rgba(129, 140, 248, 0.88)',
   auto_turret: 'rgba(45, 212, 191, 0.8)',
   default: 'rgba(74, 222, 128, 0.8)'
 };

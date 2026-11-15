@@ -12,6 +12,7 @@ export const state = {
   activeTeam: 'player',
   adhocRoomCode: null,
   adhocRoomSsid: null,
+  adhocLobby: null,
   discoveredAdhocHosts: [],
   selectedAdhocHostKey: null,
   legacyRole: null, // 'host' | 'guest'
@@ -183,7 +184,22 @@ export const dom = {
   gameoverTitle: document.getElementById('gameover-title'),
   gameoverDesc: document.getElementById('gameover-desc'),
   rematchBtn: document.getElementById('rematch-btn'),
-  overlayHangarBtn: document.getElementById('overlay-hangar-btn')
+  overlayHangarBtn: document.getElementById('overlay-hangar-btn'),
+
+  adhocLobbyScreen: document.getElementById('adhoc-lobby-screen'),
+  lobbyRoleBadge: document.getElementById('lobby-role-badge'),
+  lobbyRoomTitle: document.getElementById('lobby-room-title'),
+  lobbySubtitle: document.getElementById('lobby-subtitle'),
+  lobbyP1Summary: document.getElementById('lobby-p1-summary'),
+  lobbyP2Summary: document.getElementById('lobby-p2-summary'),
+  lobbyTankOptions: document.getElementById('lobby-tank-options'),
+  lobbyArmorOptions: document.getElementById('lobby-armor-options'),
+  lobbyMapHostWrap: document.getElementById('lobby-map-host-wrap'),
+  lobbyMapGuestView: document.getElementById('lobby-map-guest-view'),
+  lobbyGuestMapName: document.getElementById('lobby-guest-map-name'),
+  lobbyStatusText: document.getElementById('lobby-status-text'),
+  lobbyLeaveBtn: document.getElementById('lobby-leave-btn'),
+  lobbyStartBtn: document.getElementById('lobby-start-btn')
 };
 
 export function isAndroidPlatform() {

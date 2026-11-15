@@ -40,14 +40,30 @@ body {
   justify-content: center;
 }
 
+body:not(.mobile-mode) #hangar-screen {
+  padding: 0;
+  align-items: stretch;
+}
+
 .hangar-card {
   width: 100%;
-  max-width: 1380px;
+  max-width: 1480px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 22px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+body:not(.mobile-mode) .hangar-card {
+  max-width: none;
+  min-height: 100vh;
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
 }
 
 .hangar-header {
@@ -108,8 +124,9 @@ body {
 
 .hangar-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.6fr 1.15fr 0.85fr 1.1fr;
   gap: 14px;
+  flex: 1;
 }
 
 @media (max-width: 1220px) {
@@ -214,6 +231,48 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+#tank-type-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+body:not(.mobile-mode) #tank-type-options .tank-option-card {
+  padding: 12px 8px;
+}
+
+body:not(.mobile-mode) #tank-type-options .tank-card-row {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+body:not(.mobile-mode) #tank-type-options .tank-mini-canvas {
+  width: 44px;
+  height: 44px;
+}
+
+body:not(.mobile-mode) #tank-type-options .tank-card-body {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+body:not(.mobile-mode) #tank-type-options .option-title {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 13.5px;
+  gap: 0;
+}
+
+body:not(.mobile-mode) #tank-type-options .tank-card-badges,
+body:not(.mobile-mode) #tank-type-options .option-desc {
+  display: none;
 }
 
 .option-card {
@@ -1886,8 +1945,237 @@ body.pc-viewport-framed .screen {
   border-top: 1px solid var(--border);
 }
 
+/* ---------- Antesala Ad-Hoc (Lobby) ---------- */
+#adhoc-lobby-screen {
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.lobby-card {
+  width: min(1060px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+}
+
+body:not(.mobile-mode) #adhoc-lobby-screen {
+  padding: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+body:not(.mobile-mode) .lobby-card {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  padding: 20px 26px;
+  box-shadow: none;
+}
+
+.lobby-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lobby-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lobby-title-wrap h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.lobby-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.lobby-players-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lobby-player-chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+}
+
+.lobby-player-chip.p1 {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.lobby-player-chip.p2 {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.lobby-player-role {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lobby-player-chip strong {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.lobby-grid {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.lobby-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lobby-tank-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+body:not(.mobile-mode) .lobby-tank-grid .tank-option-card {
+  padding: 8px 10px;
+}
+
+body:not(.mobile-mode) .lobby-tank-grid .tank-card-row {
+  align-items: flex-start;
+}
+
+body:not(.mobile-mode) .lobby-tank-grid .option-title {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+#lobby-armor-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lobby-arena-section {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.lobby-guest-map-box {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lobby-guest-map-box strong {
+  color: var(--accent);
+  font-size: 1rem;
+}
+
+.lobby-status-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.lobby-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+body.mobile-mode #adhoc-lobby-screen {
+  padding: 8px;
+  align-items: flex-start;
+}
+
+body.mobile-mode .lobby-card {
+  width: 100%;
+  padding: 12px 14px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+body.mobile-mode.portrait-mode .lobby-grid {
+  grid-template-columns: 1fr;
+}
+
+body.mobile-mode .lobby-tank-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.mobile-mode #lobby-armor-options {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1050px) {
+  .lobby-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .lobby-tank-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #lobby-armor-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 520px) {
-  body.mobile-mode #tank-type-options {
+  body.mobile-mode #tank-type-options,
+  body.mobile-mode .lobby-tank-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-tank-grid {
     grid-template-columns: 1fr;
   }
 

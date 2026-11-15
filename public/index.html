@@ -200,6 +200,63 @@
       </div>
     </section>
 
+    <!-- ANTESALA PVP AD-HOC -->
+    <section id="adhoc-lobby-screen" class="screen hidden">
+      <div class="lobby-card">
+        <header class="lobby-header">
+          <div>
+            <span id="lobby-role-badge" class="badge">PVP AD-HOC • ANTESALA</span>
+            <h2 id="lobby-room-title">Sala: Tanques</h2>
+            <p id="lobby-subtitle" class="subtitle">Escoge tu tanque y blindaje antes de entrar en combate.</p>
+          </div>
+          <div class="lobby-players-bar">
+            <div class="lobby-player-chip">
+              <span class="lobby-p-role">👑 Anfitrión (J1)</span>
+              <strong id="lobby-p1-summary">—</strong>
+            </div>
+            <div class="lobby-player-chip">
+              <span class="lobby-p-role">🎮 Invitado (J2)</span>
+              <strong id="lobby-p2-summary">—</strong>
+            </div>
+          </div>
+        </header>
+
+        <div class="lobby-grid">
+          <div class="panel lobby-tanks-panel">
+            <h2>1. Elige tu Tanque</h2>
+            <div id="lobby-tank-options" class="lobby-tank-grid"></div>
+          </div>
+
+          <div class="panel lobby-side-panel">
+            <h2>2. Elige Blindaje</h2>
+            <div id="lobby-armor-options" class="option-list"></div>
+
+            <div class="sub-section lobby-arena-section">
+              <h2>3. Arena de Combate</h2>
+              <div id="lobby-map-host-wrap" class="pill-row">
+                <button type="button" class="pill" data-lobby-map="bunkers">Búnkeres</button>
+                <button type="button" class="pill" data-lobby-map="labyrinth">Laberinto</button>
+                <button type="button" class="pill" data-lobby-map="open">Campo Abierto</button>
+                <button type="button" class="pill" data-lobby-map="random">🎲 Aleatorio</button>
+              </div>
+              <div id="lobby-map-guest-view" class="lobby-guest-map-box hidden">
+                <span>Arena elegida por el Anfitrión:</span>
+                <strong id="lobby-guest-map-name">Búnkeres</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="hangar-footer">
+          <div id="lobby-status-text" class="ws-status ok">Conectados en la antesala.</div>
+          <div class="footer-actions">
+            <button id="lobby-leave-btn" type="button" class="btn-danger">Salir de la Sala</button>
+            <button id="lobby-start-btn" type="button" class="btn-primary hidden">⚔️ Iniciar Batalla</button>
+          </div>
+        </footer>
+      </div>
+    </section>
+
     <!-- PANTALLA DE BATALLA -->
     <section id="battle-screen" class="screen hidden">
       <header class="hud-top">

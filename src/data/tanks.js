@@ -110,6 +110,18 @@ const BERSERKER_TANK = {
   desc: 'Pasiva: +1% daño por cada 1% PV perdido. Especiales: Chupasangre (robo de vida) e Ira (<25% PV: -90% daño recibido, +25% mov.).'
 };
 
+const ASSASIN_TANK = {
+  id: 'assasin',
+  name: 'Assasin',
+  turretId: 'sneak_strike',
+  specialName: 'Golpe Trampero',
+  special2Id: 'tp',
+  special2Name: 'TP',
+  color: '#818cf8',
+  accent: '#312e81',
+  desc: 'Especiales: Golpe Trampero (44 daño; 150% espalda, -25% frontal) y TP (espera 1t con escudo -35% daño, teletransporta e invisible 2t).'
+};
+
 const TANK_TYPES_CATALOG = {
   artillery: ARTILLERY_TANK,
   breacher: BREACHER_TANK,
@@ -119,7 +131,8 @@ const TANK_TYPES_CATALOG = {
   chemist: CHEMIST_TANK,
   cain: CAIN_TANK,
   netrunner: NETRUNNER_TANK,
-  berserker: BERSERKER_TANK
+  berserker: BERSERKER_TANK,
+  assasin: ASSASIN_TANK
 };
 
 const DIFFICULTY_CONFIG = {
@@ -162,6 +175,7 @@ module.exports = {
   CAIN_TANK,
   NETRUNNER_TANK,
   BERSERKER_TANK,
+  ASSASIN_TANK,
   TANK_TYPES_CATALOG,
   DIFFICULTY_CONFIG
 };

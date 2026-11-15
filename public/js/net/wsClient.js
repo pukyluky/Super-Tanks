@@ -120,9 +120,14 @@ export function connectRemoteAdhoc(rawHostAddr, initialPayload) {
       if (!opened && dom.adhocGuestStatus) {
         dom.adhocGuestStatus.textContent = lastErrorMsg || `No se pudo conectar a ${cleanHost} (comprueba IP, puerto y Firewall).`;
       }
-      if (state.gameMode === 'pvp_adhoc' && !dom.battleScreen.classList.contains('hidden')) {
+      if ((state.gameMode === 'pvp_adhoc' && !dom.battleScreen.classList.contains('hidden'))
+          || (dom.adhocLobbyScreen && !dom.adhocLobbyScreen.classList.contains('hidden'))) {
         showToast('Conexión con el Host Ad-Hoc cerrada.');
+        state.adhocLobby = null;
+        state.adhocRoomCode = null;
+        state.adhocRoomSsid = null;
         dom.gameoverOverlay.classList.add('hidden');
+        dom.adhocLobbyScreen?.classList.add('hidden');
         dom.battleScreen.classList.add('hidden');
         dom.hangarScreen.classList.remove('hidden');
       }
@@ -171,12 +176,13 @@ export function applyShotResolved(msg) {
     spawnExplosionParticles(ex.x, ex.y, ex.radius, ex.kind);
   }
   for (const hit of ev.tankHits) {
+    const isBackstab = hit.hitSector === 'back';
     state.floatingTexts.push({
       x: hit.x * CELL_PX,
       y: hit.y * CELL_PX - 12,
-      text: `-${hit.damage}`,
-      color: hit.destroyed ? '#fde047' : '#f87171',
-      life: 1.0
+      text: isBackstab ? `-${hit.damage} ¡ESPALDA!` : `-${hit.damage}`,
+      color: hit.destroyed || isBackstab ? '#fde047' : '#f87171',
+      life: isBackstab ? 1.25 : 1.0
     });
   }
   for (const hl of ev.heals || []) {
@@ -195,6 +201,13 @@ export function applyShotResolved(msg) {
 
 function markServerStopped() {
   state.serverStopped = true;
+  closeRemoteAdhoc();
+  if (state.ws && state.ws.readyState <= WebSocket.OPEN) {
+    try {
+      state.ws.onclose = null;
+      state.ws.close(1000, 'server_stopped');
+    } catch (_) {}
+  }
   dom.wsStatusEl.textContent = 'Servidor cerrado correctamente. Ya puedes cerrar esta pestaña.';
   dom.wsStatusEl.className = 'ws-status err';
   dom.startBtn.disabled = true;
@@ -214,9 +227,42 @@ async function requestServerShutdown() {
     sendWs({ type: 'shutdown_server' });
     markServerStopped();
   }
+  setTimeout(() => {
+    try {
+      window.close();
+    } catch (_) {}
+  }, 150);
+}
+
+let clientExitNotified = false;
+function notifyClientExit() {
+  if (clientExitNotified) return;
+  clientExitNotified = true;
+  closeRemoteAdhoc();
+  if (window.AndroidBridge || state.serverStopped) return;
+  if (state.ws) {
+    try {
+      state.ws.onclose = null;
+      if (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING) {
+        state.ws.close(1000, 'client_exit');
+      }
+    } catch (_) {}
+  }
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon('/api/client-closing');
+    } else {
+      fetch('/api/client-closing', { method: 'POST', keepalive: true }).catch(() => {});
+    }
+  } catch (_) {}
 }
 
 export function initShutdownButtons() {
+  if (!window.__tanquesExitHookBound) {
+    window.__tanquesExitHookBound = true;
+    window.addEventListener('pagehide', notifyClientExit);
+    window.addEventListener('beforeunload', notifyClientExit);
+  }
   if (dom.shutdownHangarBtn && !dom.shutdownHangarBtn.dataset.bound) {
     dom.shutdownHangarBtn.dataset.bound = '1';
     dom.shutdownHangarBtn.onclick = requestServerShutdown;
@@ -300,6 +346,7 @@ function handleServerMessage(msg) {
     syncVisualTanks(enteringBattle || msg.turnNumber === 1);
     rebuildTerrainCanvas();
     dom.hangarScreen.classList.add('hidden');
+    dom.adhocLobbyScreen?.classList.add('hidden');
     dom.battleScreen.classList.remove('hidden');
     updateHUD();
     return;
@@ -344,17 +391,31 @@ function handleServerMessage(msg) {
   if (msg.type === 'tank_moved') {
     const t = state.tanks.find((x) => x.id === msg.tankId);
     if (t) {
+      const vt = state.visualTanks.get(t.id);
+      const wasHidden = Boolean(t.hidden || (vt && vt.hidden) || t.x === -999);
       t.x = msg.x;
       t.y = msg.y;
       t.dir = msg.dir;
       t.moveAp = msg.moveAp;
-      const vt = state.visualTanks.get(t.id);
+      if (msg.uncloaked) {
+        t.invisibleTurns = 0;
+        t.hidden = false;
+      }
+      if (msg.logs) {
+        state.logs = msg.logs;
+      }
       if (vt && Array.isArray(msg.path) && msg.path.length > 0) {
+        if (wasHidden) {
+          vt.x = msg.path[0].x;
+          vt.y = msg.path[0].y;
+          vt.hidden = false;
+        }
         vt.queue.push(...msg.path.map((p) => ({ x: p.x, y: p.y })));
       } else if (vt) {
         vt.x = t.x;
         vt.y = t.y;
         vt.dir = t.dir;
+        vt.hidden = false;
       }
     } else {
       const dep = state.deployables.find((d) => d.id === msg.tankId);

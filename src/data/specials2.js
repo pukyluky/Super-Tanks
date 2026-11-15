@@ -102,6 +102,17 @@ const RAGE_ABILITY = {
   desc: 'Solo cuando la vida baja del 25% PV y sin CD (dura 1 turno): reduce 90% el daño recibido y otorga +25% de distancia de desplazamiento.'
 };
 
+const TP_ABILITY = {
+  id: 'tp',
+  name: 'TP',
+  cooldown: 3,
+  range: 56,
+  waitTurns: 1,
+  shieldReduction: 0.35,
+  invisTurns: 2,
+  desc: 'Elige destino y espera 1 turno sin moverse ni disparar con escudo (-35% daño). Al turno siguiente se teletransporta y queda invisible 2 turnos (se quita al moverse o disparar).'
+};
+
 const SPECIAL2_CATALOG = {
   molotov: MOLOTOV_ABILITY,
   landmine: LANDMINE_ABILITY,
@@ -111,7 +122,8 @@ const SPECIAL2_CATALOG = {
   freeze_shot: FREEZE_SHOT_ABILITY,
   fire_wall: FIRE_WALL_ABILITY,
   emp_bomb: EMP_BOMB_ABILITY,
-  rage: RAGE_ABILITY
+  rage: RAGE_ABILITY,
+  tp: TP_ABILITY
 };
 
 module.exports = {
@@ -124,5 +136,6 @@ module.exports = {
   FIRE_WALL_ABILITY,
   EMP_BOMB_ABILITY,
   RAGE_ABILITY,
+  TP_ABILITY,
   SPECIAL2_CATALOG
 };

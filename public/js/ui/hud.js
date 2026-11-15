@@ -66,9 +66,13 @@ export function updateHUD() {
     const pct = Math.max(0, (player.hp / player.maxHp) * 100);
     dom.playerHpBar.style.width = `${pct}%`;
     dom.playerHpText.textContent = `${player.hp} / ${player.maxHp}`;
+    const statusTags = [];
+    if (player.tpShieldActive) statusTags.push('ESC -35%');
+    if ((player.invisibleTurns || 0) > 0) statusTags.push(`SIGILO ${player.invisibleTurns}t`);
+    const tagStr = statusTags.length > 0 ? ` • ${statusTags.join(' • ')}` : '';
     dom.playerApText.textContent = usingDrone
       ? `${drone.moveAp} / ${drone.maxMoveAp} (Dron)`
-      : `${player.moveAp} / ${player.maxMoveAp}`;
+      : `${player.moveAp} / ${player.maxMoveAp}${tagStr}`;
 
     const inTrapBurst = !usingDrone && (player.trapBurstRemaining || 0) > 0;
     if (inTrapBurst) {
@@ -124,6 +128,10 @@ export function updateHUD() {
         dom.weaponSpecial2Btn.textContent = `[3] ${sp2.name}`;
         dom.weaponSpecial2Btn.disabled = !myTurn;
       }
+      if (state.weaponMode === 'special2') state.weaponMode = 'normal';
+    } else if (!usingDrone && player.tpPending) {
+      dom.weaponSpecial2Btn.textContent = `[3] ${sp2 ? sp2.name : 'TP'} (ESPERANDO...)`;
+      dom.weaponSpecial2Btn.disabled = true;
       if (state.weaponMode === 'special2') state.weaponMode = 'normal';
     } else if (!usingDrone && player.chargedReady) {
       dom.weaponSpecial2Btn.textContent = `[3] ${sp2 ? sp2.name : 'Cargado'} (¡LISTO!)`;
@@ -204,7 +212,7 @@ export function updateHUD() {
       div.innerHTML = `
         <div class="enemy-top">
           <span style="color:${en.color}">${en.name}</span>
-          <span>${en.alive ? `${en.hp} PV` : 'Destruido'}</span>
+          <span>${en.alive ? `${en.hp} PV${en.hidden ? ' (Sigilo)' : ''}` : 'Destruido'}</span>
         </div>
         <div style="font-size:11px;color:#93a4bf;margin-bottom:4px;">${turretName}${armorLabel ? ` • ${armorLabel}` : ''}</div>
         <div class="enemy-hp-bg">
@@ -302,7 +310,7 @@ export function selectWeapon(mode) {
     }
     const sp2Ready = usingDrone
       ? (drone.droneSpecial2Cooldown || 0) === 0
-      : (player.special2Cooldown === 0 || player.chargedReady);
+      : ((player.special2Cooldown === 0 && !player.tpPending) || player.chargedReady);
     if (sp2Ready) {
       state.weaponMode = 'special2';
       updateHUD();
